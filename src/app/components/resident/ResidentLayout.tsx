@@ -3,17 +3,14 @@ import { Outlet, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
   FileText,
-  Bell,
   LogOut,
   Shield,
   Menu,
   X,
-  ChevronDown,
   HelpCircle,
   Settings,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import { NotificationPanel } from "../shared/NotificationPanel";
 import { ToastNotification } from "../shared/ToastNotification";
 import { useApp } from "../../context/AppContext";
 
@@ -26,11 +23,9 @@ const navItems = [
 
 export function ResidentLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const { user, setUser, notifications, markNotificationsRead, toastMessage, setToastMessage } = useApp();
+  const { user, setUser, toastMessage, setToastMessage } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -104,7 +99,6 @@ export function ResidentLayout() {
                 <p className="text-white text-sm truncate">{user?.name || "Resident"}</p>
                 <p className="text-blue-300/60 text-xs truncate">{user?.email || ""}</p>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
             </div>
           </div>
 
@@ -168,34 +162,7 @@ export function ResidentLayout() {
 
           <div className="flex-1" />
 
-          {/* Notifications */}
-          <div className="relative">
-            <button
-              onClick={() => setNotifOpen(!notifOpen)}
-              className="relative w-9 h-9 flex items-center justify-center text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            <NotificationPanel
-              notifications={notifications}
-              isOpen={notifOpen}
-              onClose={() => setNotifOpen(false)}
-              onMarkAllRead={() => {
-                markNotificationsRead();
-                setNotifOpen(false);
-              }}
-            />
-          </div>
 
-          {/* Avatar */}
-          <div className="w-8 h-8 bg-[#1e3a5f] rounded-full flex items-center justify-center">
-            <span className="text-white text-xs">{user?.name?.charAt(0) || "R"}</span>
-          </div>
         </header>
 
         {/* Page content */}
