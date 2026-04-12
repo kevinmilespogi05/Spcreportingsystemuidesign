@@ -1,12 +1,25 @@
 import { useState, useRef } from "react";
-import { X, ChevronRight, ChevronLeft, Upload, Check, MapPin, FileText, Tag, Image as ImageIcon } from "lucide-react";
+import { X, ChevronRight, ChevronLeft, Upload, Check, MapPin, FileText, Tag, Image as ImageIcon, AlertCircle, Loader } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { COMPLAINT_CATEGORIES, ComplaintCategory, Complaint } from "../../data/mockData";
 import { useApp } from "../../context/AppContext";
+import { uploadToCloudinary, generatePreviewUrl, validateImageFile } from "../../../lib/cloudinaryService";
 
 interface ComplaintSubmissionModalProps {
   onClose: () => void;
 }
+
+const COMPLAINT_CATEGORIES = [
+  "Road & Infrastructure",
+  "Waste Management",
+  "Public Safety",
+  "Noise Complaint",
+  "Street Lighting",
+  "Water & Drainage",
+  "Public Health",
+  "Other",
+] as const;
+
+type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
 
 const steps = [
   { id: 1, label: "Category", icon: Tag },
@@ -20,15 +33,77 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   const [category, setCategory] = useState<ComplaintCategory | "">("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { residentComplaints, setResidentComplaints, complaints, setComplaints, setToastMessage, user } = useApp();
+  const { createComplaint, setToastMessage } = useApp();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFileName(e.target.files[0].name);
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    // Validate file
+    const validation = validateImageFile(selectedFile);
+    if (!validation.isValid) {
+      setUploadError(validation.error || "Invalid file");
+      return;
     }
+
+    // Clear previous errors
+    setUploadError(null);
+    setFile(selectedFile);
+
+    // Generate preview
+    try {
+      const previewUrl = await generatePreviewUrl(selectedFile);
+      setPreview(previewUrl);
+    } catch (error) {
+      setUploadError("Could not generate preview");
+    }
+  };
+
+  const handleUploadImage = async () => {
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      console.log("Starting upload with:", { cloudName, uploadPreset });
+      
+      const response = await uploadToCloudinary(file, cloudName, uploadPreset);
+
+      console.log("Upload response:", response);
+
+      if (response.success && response.secure_url) {
+        setImageUrl(response.secure_url);
+        setToastMessage("Image uploaded successfully");
+      } else {
+        const errorMsg = response.error || "Failed to upload image";
+        console.error("Upload failed:", errorMsg);
+        setUploadError(errorMsg);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Upload failed. Please try again.";
+      console.error("Upload error:", error);
+      setUploadError(errorMsg);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setFile(null);
+    setPreview(null);
+    setImageUrl(null);
+    setUploadError(null);
   };
 
   const handleNext = () => {
@@ -41,30 +116,31 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
 
   const canProceed = () => {
     if (step === 1) return category !== "";
-    if (step === 2) return description.trim().length > 20;
+    if (step === 2) return description.trim().length >= 20;
     return true;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
-    setTimeout(() => {
-      const newId = `SPC-2024-0${Math.floor(Math.random() * 90) + 10}`;
-      const newComplaint: Complaint = {
-        id: newId,
-        residentName: user?.name || "Ana Cruz",
-        residentEmail: user?.email || "ana.cruz@email.com",
+    try {
+      const response = await createComplaint({
         category: category as ComplaintCategory,
         description,
-        location,
-        dateSubmitted: new Date().toISOString().split("T")[0],
-        status: "Pending",
-      };
-      setResidentComplaints([newComplaint, ...residentComplaints]);
-      setComplaints([newComplaint, ...complaints]);
+        location: location || undefined,
+        imageUrl: imageUrl || undefined,
+      });
+
+      if (response.success) {
+        setToastMessage(response.message);
+        onClose();
+      } else {
+        setToastMessage(response.error || "Failed to submit complaint. Please try again.");
+      }
+    } catch (error) {
+      setToastMessage("An unexpected error occurred. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      setToastMessage(`Complaint ${newId} submitted successfully! You'll receive updates via notifications.`);
-      onClose();
-    }, 1500);
+    }
   };
 
   return (
@@ -234,25 +310,75 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                   Upload photos or documents to support your complaint (optional)
                 </p>
 
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-[#1e3a5f]/50 hover:bg-slate-50 transition-all group"
-                >
-                  <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-[#1e3a5f]/10 transition-colors">
-                    <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#1e3a5f] transition-colors" />
+                {!preview && !imageUrl ? (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-[#1e3a5f]/50 hover:bg-slate-50 transition-all group"
+                  >
+                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-[#1e3a5f]/10 transition-colors">
+                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#1e3a5f] transition-colors" />
+                    </div>
+                    <p className="text-slate-600 text-sm">Click to upload or drag & drop</p>
+                    <p className="text-slate-400 text-xs mt-1">PNG, JPG, GIF, WebP or PDF up to 5MB</p>
                   </div>
-                  {fileName ? (
-                    <>
-                      <p className="text-slate-700 text-sm font-medium">{fileName}</p>
-                      <p className="text-slate-400 text-xs mt-1">Click to change file</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-slate-600 text-sm">Click to upload or drag & drop</p>
-                      <p className="text-slate-400 text-xs mt-1">PNG, JPG, PDF up to 10MB</p>
-                    </>
-                  )}
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Image Preview */}
+                    <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex items-center justify-center">
+                      {preview ? (
+                        <img
+                          src={preview}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-slate-400">Loading preview...</div>
+                      )}
+                    </div>
+
+                    {/* Upload Status */}
+                    {!imageUrl ? (
+                      <div className="space-y-3">
+                        {uploadError && (
+                          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                            <p className="text-sm text-red-700">{uploadError}</p>
+                          </div>
+                        )}
+                        <button
+                          onClick={handleUploadImage}
+                          disabled={isUploading}
+                          className="w-full flex items-center justify-center gap-2 text-sm bg-[#1e3a5f] hover:bg-[#162d4a] text-white py-2 px-4 rounded-xl transition-all disabled:opacity-70"
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader className="w-4 h-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              Upload Image
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                        <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-emerald-700">Image uploaded successfully</span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleRemoveImage}
+                      className="w-full text-sm border border-slate-200 text-slate-600 hover:text-slate-700 hover:bg-slate-50 py-2 px-4 rounded-xl transition-all"
+                    >
+                      Change Image
+                    </button>
+                  </div>
+                )}
+
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -260,19 +386,6 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                   accept="image/*,.pdf"
                   className="hidden"
                 />
-
-                {fileName && (
-                  <div className="flex items-center gap-2 mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span className="text-sm text-emerald-700">{fileName} ready to upload</span>
-                    <button
-                      onClick={() => setFileName(null)}
-                      className="ml-auto text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
 
                 <p className="text-xs text-slate-400 mt-4 text-center">
                   Adding photos significantly helps officials assess and resolve issues faster
@@ -294,6 +407,16 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                 </p>
 
                 <div className="space-y-3">
+                  {imageUrl && (
+                    <div className="rounded-xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex items-center justify-center">
+                      <img
+                        src={imageUrl}
+                        alt="Complaint attachment"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                     <div className="flex justify-between items-start">
                       <span className="text-xs text-slate-500 uppercase tracking-wide">Category</span>
@@ -312,15 +435,6 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                         <div className="flex justify-between items-start">
                           <span className="text-xs text-slate-500 uppercase tracking-wide">Location</span>
                           <span className="text-sm text-slate-800 text-right">{location}</span>
-                        </div>
-                      </>
-                    )}
-                    {fileName && (
-                      <>
-                        <div className="h-px bg-slate-200" />
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">Attachment</span>
-                          <span className="text-sm text-slate-800">{fileName}</span>
                         </div>
                       </>
                     )}

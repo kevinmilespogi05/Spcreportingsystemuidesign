@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Settings,
 } from "lucide-react";
+import { supabase } from "../../../lib/supabase";
 import { NotificationPanel } from "../shared/NotificationPanel";
 import { ToastNotification } from "../shared/ToastNotification";
 import { useApp } from "../../context/AppContext";
@@ -31,6 +32,17 @@ export function ResidentLayout() {
   const location = useLocation();
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!user) {
+        navigate("/");
+      }
+    }, 500); // Give AppContext time to load user from session
+
+    return () => clearTimeout(timer);
+  }, [user, navigate]);
+
   const isActive = (href: string) => {
     if (href === "/resident") return location.pathname === "/resident";
     return location.pathname.startsWith(href);
@@ -38,7 +50,8 @@ export function ResidentLayout() {
 
   const activeLabel = navItems.find((item) => isActive(item.href))?.label || "Dashboard";
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     navigate("/");
   };

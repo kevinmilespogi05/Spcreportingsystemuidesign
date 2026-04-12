@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Clock, CheckCircle2, AlertCircle, FileText, ArrowRight, MapPin, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StatusBadge } from "../shared/StatusBadge";
 import { ComplaintSubmissionModal } from "./ComplaintSubmissionModal";
 import { useApp } from "../../context/AppContext";
-import { Complaint } from "../../data/mockData";
+import { Complaint } from "../../lib/complaintService";
 
 const statusCounts = (complaints: Complaint[]) => ({
   total: complaints.length,
@@ -16,8 +16,14 @@ const statusCounts = (complaints: Complaint[]) => ({
 export function ResidentDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const { residentComplaints } = useApp();
-  const counts = statusCounts(residentComplaints);
+  const { complaints, complaintsLoading, fetchResidentComplaints } = useApp();
+
+  // Fetch resident complaints on mount
+  useEffect(() => {
+    fetchResidentComplaints();
+  }, []);
+
+  const counts = statusCounts(complaints);
 
   return (
     <>
@@ -126,10 +132,10 @@ export function ResidentDashboard() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-slate-700 text-lg">Recent Complaints</h2>
-              <span className="text-xs text-slate-400">{residentComplaints.length} total</span>
+              <span className="text-xs text-slate-400">{complaints.length} total</span>
             </div>
 
-            {residentComplaints.length === 0 ? (
+            {complaints.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                 <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FileText className="w-7 h-7 text-slate-400" />
@@ -148,7 +154,7 @@ export function ResidentDashboard() {
               </div>
             ) : (
               <div className="space-y-3">
-                {residentComplaints.map((complaint, i) => (
+                {complaints.map((complaint, i) => (
                   <motion.div
                     key={complaint.id}
                     initial={{ opacity: 0, y: 12 }}
@@ -161,7 +167,7 @@ export function ResidentDashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                           <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {complaint.id}
+                            {complaint.complaint_code}
                           </span>
                           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                             {complaint.category}
@@ -179,7 +185,7 @@ export function ResidentDashboard() {
                           )}
                           <span className="flex items-center gap-1 text-xs text-slate-400">
                             <Calendar className="w-3 h-3" />
-                            {complaint.dateSubmitted}
+                            {new Date(complaint.created_at).toLocaleDateString()}
                           </span>
                         </div>
                       </div>

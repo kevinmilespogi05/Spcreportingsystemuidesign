@@ -1,4 +1,4 @@
-import { ComplaintStatus } from "../../data/mockData";
+import { ComplaintStatus } from "../../lib/complaintService";
 
 interface StatusBadgeProps {
   status: ComplaintStatus;

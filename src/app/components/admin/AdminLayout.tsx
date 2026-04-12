@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
@@ -13,7 +13,9 @@ import {
   BarChart3,
   Settings,
   Tag,
+  Ban,
 } from "lucide-react";
+import { supabase } from "../../../lib/supabase";
 import { NotificationPanel } from "../shared/NotificationPanel";
 import { ToastNotification } from "../shared/ToastNotification";
 import { useApp } from "../../context/AppContext";
@@ -22,6 +24,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/admin" },
   { icon: FileText, label: "Complaints", href: "/admin/complaints" },
   { icon: Users, label: "Residents", href: "/admin/residents" },
+  { icon: Ban, label: "Banned Residents", href: "/admin/banned" },
   { icon: Tag, label: "Categories", href: "/admin/categories" },
   { icon: BarChart3, label: "Reports & Analytics", href: "/admin/analytics" },
   { icon: Settings, label: "System Settings", href: "/admin/settings" },
@@ -35,6 +38,17 @@ export function AdminLayout() {
   const location = useLocation();
   const unreadCount = adminNotifs.filter((n) => !n.read).length;
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!user) {
+        navigate("/");
+      }
+    }, 500); // Give AppContext time to load user from session
+
+    return () => clearTimeout(timer);
+  }, [user, navigate]);
+
   const isActive = (href: string) => {
     if (href === "/admin") return location.pathname === "/admin";
     return location.pathname.startsWith(href);
@@ -42,7 +56,8 @@ export function AdminLayout() {
 
   const activeLabel = navItems.find((item) => isActive(item.href))?.label || "Overview";
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     navigate("/");
   };

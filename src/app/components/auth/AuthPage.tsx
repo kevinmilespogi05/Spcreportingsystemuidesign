@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Eye, EyeOff, Shield, FileText, Users, BarChart3, ChevronRight, Lock } from "lucide-react";
+import { Eye, EyeOff, Shield, FileText, Users, BarChart3, ChevronRight, Lock, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../../context/AppContext";
+import { registerUser, loginUser, validateEmail, validatePassword } from "../../../lib/authService";
+import { TermsModal } from "./TermsModal";
+import { PrivacyModal } from "./PrivacyModal";
 
 type Tab = "login" | "signup";
 type Role = "resident" | "admin";
@@ -12,6 +15,11 @@ export function AuthPage() {
   const [role, setRole] = useState<Role>("resident");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [successMessage, setSuccessMessage] = useState<string>("");
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [signupForm, setSignupForm] = useState({
@@ -23,32 +31,77 @@ export function AuthPage() {
   const { setUser } = useApp();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage("");
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const result = await loginUser(
+        {
+          email: loginForm.email,
+          password: loginForm.password,
+        },
+        role
+      );
+
+      if (result.success && result.user) {
+        setUser({
+          name: result.user.name,
+          email: result.user.email,
+          role: result.user.role as "resident" | "admin",
+        });
+        navigate(result.user.role === "resident" ? "/resident" : "/admin");
+      } else {
+        setErrorMessage(result.error || result.message);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      setErrorMessage("An unexpected error occurred. Please try again.");
+    } finally {
       setIsLoading(false);
-      setUser({
-        name: role === "resident" ? "Ana Cruz" : "Admin Officer",
-        email: loginForm.email || (role === "resident" ? "ana.cruz@email.com" : "admin@spc.gov.ph"),
-        role,
-      });
-      navigate(role === "resident" ? "/resident" : "/admin");
-    }, 1000);
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    // Validate terms acceptance
+    if (!termsAccepted) {
+      setErrorMessage("You must agree to the Terms of Service and Privacy Policy");
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setUser({
-        name: signupForm.fullName || "New Resident",
+
+    try {
+      const result = await registerUser({
+        fullName: signupForm.fullName,
         email: signupForm.email,
-        role,
+        password: signupForm.password,
       });
-      navigate(role === "resident" ? "/resident" : "/admin");
-    }, 1200);
+
+      if (result.success) {
+        setSuccessMessage(result.message);
+        // Clear form
+        setSignupForm({ fullName: "", email: "", password: "" });
+        setTermsAccepted(false);
+        // Switch to login after successful registration
+        setTimeout(() => {
+          setTab("login");
+          setSuccessMessage("");
+        }, 2000);
+      } else {
+        setErrorMessage(result.error || result.message);
+      }
+    } catch (error) {
+      console.error("Signup error:", error);
+      setErrorMessage("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -120,7 +173,7 @@ export function AuthPage() {
       </div>
 
       {/* Right Panel - Auth Form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12">
+      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12 min-h-screen overflow-y-auto">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
@@ -136,7 +189,7 @@ export function AuthPage() {
               {(["login", "signup"] as Tab[]).map((t) => (
                 <button
                   key={t}
-                  onClick={() => setTab(t)}
+                  onClick={() => { setTab(t); setErrorMessage(""); setSuccessMessage(""); }}
                   className={`flex-1 py-2 rounded-lg text-sm transition-all duration-200 ${
                     tab === t
                       ? "bg-white text-slate-800 shadow-sm font-medium"
@@ -161,6 +214,14 @@ export function AuthPage() {
                     <h2 className="text-slate-800 mb-1">Welcome back</h2>
                     <p className="text-slate-500 text-sm">Sign in to access your account</p>
                   </div>
+
+                  {/* Error Message */}
+                  {errorMessage && (
+                    <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">{errorMessage}</p>
+                    </div>
+                  )}
 
                   {/* Role Selector */}
                   <div className="mb-5">
@@ -243,13 +304,6 @@ export function AuthPage() {
                       )}
                     </button>
                   </form>
-
-                  {/* Demo hint */}
-                  <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                    <p className="text-xs text-blue-700">
-                      <span className="font-medium">Demo Mode:</span> Select a role and click Sign In to explore the system.
-                    </p>
-                  </div>
                 </motion.div>
               ) : (
                 <motion.div
@@ -264,34 +318,21 @@ export function AuthPage() {
                     <p className="text-slate-500 text-sm">Join the community reporting platform</p>
                   </div>
 
-                  {/* Role Selector */}
-                  <div className="mb-5">
-                    <label className="text-sm text-slate-600 mb-2 block">Register as</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(["resident", "admin"] as Role[]).map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setRole(r)}
-                          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                            role === r
-                              ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
-                              : "border-slate-200 text-slate-500 hover:border-slate-300"
-                          }`}
-                        >
-                          {r === "resident" ? (
-                            <Users className="w-4 h-4" />
-                          ) : (
-                            <Shield className="w-4 h-4" />
-                          )}
-                          <span className="text-sm capitalize">{r}</span>
-                          {role === r && (
-                            <div className="ml-auto w-2 h-2 bg-[#1e3a5f] rounded-full" />
-                          )}
-                        </button>
-                      ))}
+                  {/* Error Message */}
+                  {errorMessage && (
+                    <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">{errorMessage}</p>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Success Message */}
+                  {successMessage && (
+                    <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200 flex gap-2">
+                      <div className="w-4 h-4 bg-green-600 rounded-full flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-green-700">{successMessage}</p>
+                    </div>
+                  )}
 
                   <form onSubmit={handleSignup} className="space-y-4">
                     <div>
@@ -316,6 +357,9 @@ export function AuthPage() {
                     </div>
                     <div>
                       <label className="text-sm text-slate-600 mb-1.5 block">Password</label>
+                      <p className="text-xs text-slate-500 mb-2">
+                        Must contain 8+ characters, uppercase, lowercase, and a number
+                      </p>
                       <div className="relative">
                         <input
                           type={showPassword ? "text" : "password"}
@@ -334,24 +378,38 @@ export function AuthPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2 pt-1">
+                    <div className="flex items-start gap-2 pt-2">
                       <input
                         type="checkbox"
                         id="terms"
-                        className="mt-0.5 accent-[#1e3a5f]"
-                        required
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="mt-0.5 accent-[#1e3a5f] cursor-pointer"
                       />
-                      <label htmlFor="terms" className="text-xs text-slate-500 leading-relaxed cursor-pointer">
+                      <label htmlFor="terms" className="text-xs text-slate-600 leading-relaxed cursor-pointer">
                         I agree to the{" "}
-                        <span className="text-blue-600">Terms of Service</span> and{" "}
-                        <span className="text-blue-600">Privacy Policy</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowTermsModal(true)}
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Terms of Service
+                        </button>
+                        {" "}and{" "}
+                        <button
+                          type="button"
+                          onClick={() => setShowPrivacyModal(true)}
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Privacy Policy
+                        </button>
                       </label>
                     </div>
 
                     <button
                       type="submit"
-                      disabled={isLoading}
-                      className="w-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                      disabled={isLoading || !termsAccepted}
+                      className="w-full bg-[#1e3a5f] hover:bg-[#162d4a] disabled:bg-slate-300 text-white py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isLoading ? (
                         <>
@@ -373,7 +431,7 @@ export function AuthPage() {
             <p className="text-center text-xs text-slate-400 mt-6">
               {tab === "login" ? "Don't have an account? " : "Already have an account? "}
               <button
-                onClick={() => setTab(tab === "login" ? "signup" : "login")}
+                onClick={() => { setTab(tab === "login" ? "signup" : "login"); setErrorMessage(""); setSuccessMessage(""); }}
                 className="text-blue-600 hover:text-blue-800 font-medium"
               >
                 {tab === "login" ? "Sign up" : "Sign in"}
@@ -386,6 +444,10 @@ export function AuthPage() {
           </p>
         </div>
       </div>
+
+      {/* Modals */}
+      <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} />
+      <PrivacyModal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
     </div>
   );
 }

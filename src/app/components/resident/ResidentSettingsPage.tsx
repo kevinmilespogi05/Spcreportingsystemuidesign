@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   User,
   Mail,
@@ -15,6 +15,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { supabase } from "../../../lib/supabase";
 import { useApp } from "../../context/AppContext";
 import { useNavigate } from "react-router";
 
@@ -23,11 +24,11 @@ export function ResidentSettingsPage() {
   const navigate = useNavigate();
 
   const [profileForm, setProfileForm] = useState({
-    fullName: user?.name || "Ana Cruz",
-    email: user?.email || "ana.cruz@email.com",
-    phone: "0917-555-1234",
-    address: "24 Pag-asa Street, Brgy. Poblacion",
-    barangay: "Poblacion",
+    fullName: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "0917-555-1234",
+    address: user?.address || "",
+    barangay: "Brgy. San Pablo",
   });
 
   const [notifications, setNotifications] = useState({
@@ -50,16 +51,63 @@ export function ResidentSettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Update form when user data changes
+  useEffect(() => {
+    setProfileForm({
+      fullName: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "0917-555-1234",
+      address: user?.address || "",
+      barangay: "Brgy. San Pablo",
+    });
+  }, [user]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
-    setTimeout(() => {
-      setUser({ ...user!, name: profileForm.fullName, email: profileForm.email });
+    
+    try {
+      // Get current user
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("User not authenticated");
+
+      // Update user metadata in Supabase Auth
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          full_name: profileForm.fullName,
+        },
+      });
+
+      if (authError) throw authError;
+
+      // Update resident profile in database
+      const { error: dbError } = await supabase
+        .from("residents")
+        .update({
+          full_name: profileForm.fullName,
+          phone_number: profileForm.phone,
+          address: profileForm.address,
+        })
+        .eq("id", authUser.id);
+
+      if (dbError) throw dbError;
+
+      // Update user profile in app context
+      setUser({
+        ...user!,
+        name: profileForm.fullName,
+        phone: profileForm.phone,
+        address: profileForm.address,
+      });
+
       setSavingProfile(false);
       setSavedProfile(true);
       setToastMessage("Profile updated successfully.");
       setTimeout(() => setSavedProfile(false), 2500);
-    }, 800);
+    } catch (error: any) {
+      setSavingProfile(false);
+      setToastMessage(error.message || "Failed to update profile. Please try again.");
+    }
   };
 
   const handleSavePassword = (e: React.FormEvent) => {
@@ -76,7 +124,8 @@ export function ResidentSettingsPage() {
     }, 800);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     navigate("/");
   };
@@ -170,15 +219,9 @@ export function ResidentSettingsPage() {
                   <label className="text-xs text-slate-500 mb-1.5 block uppercase tracking-wide">
                     Barangay
                   </label>
-                  <select
-                    value={profileForm.barangay}
-                    onChange={(e) => setProfileForm({ ...profileForm, barangay: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all"
-                  >
-                    {["Poblacion", "San Jose", "Bagong Silang", "Masagana", "Riverside", "Centro"].map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
+                  <div className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-800">
+                    {profileForm.barangay}
+                  </div>
                 </div>
               </div>
               <div>

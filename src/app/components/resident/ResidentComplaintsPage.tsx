@@ -1,32 +1,53 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, X, FileText, MapPin, Calendar, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StatusBadge } from "../shared/StatusBadge";
 import { ComplaintSubmissionModal } from "./ComplaintSubmissionModal";
 import { useApp } from "../../context/AppContext";
-import { ComplaintCategory, ComplaintStatus } from "../../data/mockData";
+import { ComplaintStatus } from "../../lib/complaintService";
 
 const STATUS_OPTIONS: (ComplaintStatus | "All")[] = ["All", "Pending", "In Progress", "Resolved", "Rejected"];
-const CATEGORY_OPTIONS: (ComplaintCategory | "All")[] = [
-  "All", "Road & Infrastructure", "Waste Management", "Public Safety",
-  "Noise Complaint", "Street Lighting", "Water & Drainage", "Public Health", "Other",
-];
+const COMPLAINT_CATEGORIES = [
+  "Road & Infrastructure",
+  "Waste Management",
+  "Public Safety",
+  "Noise Complaint",
+  "Street Lighting",
+  "Water & Drainage",
+  "Public Health",
+  "Other",
+] as const;
+type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
+const CATEGORY_OPTIONS: (ComplaintCategory | "All")[] = ["All", ...COMPLAINT_CATEGORIES];
 
 export function ResidentComplaintsPage() {
-  const { residentComplaints } = useApp();
+  const { complaints, complaintsLoading, fetchResidentComplaints } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus | "All">("All");
   const [categoryFilter, setCategoryFilter] = useState<ComplaintCategory | "All">("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Fetch complaints on component mount
+  useEffect(() => {
+    const loadComplaints = async () => {
+      setLoadError(null);
+      const response = await fetchResidentComplaints();
+      if (!response.success) {
+        setLoadError(response.error || "Failed to load complaints");
+      }
+    };
+    loadComplaints();
+  }, []);
 
   const filtered = useMemo(() => {
-    let result = [...residentComplaints];
+    let result = [...complaints];
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
         (c) =>
-          c.id.toLowerCase().includes(q) ||
+          c.complaint_code.toLowerCase().includes(q) ||
           c.category.toLowerCase().includes(q) ||
           c.description.toLowerCase().includes(q)
       );
@@ -34,13 +55,30 @@ export function ResidentComplaintsPage() {
     if (statusFilter !== "All") result = result.filter((c) => c.status === statusFilter);
     if (categoryFilter !== "All") result = result.filter((c) => c.category === categoryFilter);
     return result;
-  }, [residentComplaints, search, statusFilter, categoryFilter]);
+  }, [complaints, search, statusFilter, categoryFilter]);
 
   const counts = {
-    pending: residentComplaints.filter((c) => c.status === "Pending").length,
-    inProgress: residentComplaints.filter((c) => c.status === "In Progress").length,
-    resolved: residentComplaints.filter((c) => c.status === "Resolved").length,
+    pending: complaints.filter((c) => c.status === "Pending").length,
+    inProgress: complaints.filter((c) => c.status === "In Progress").length,
+    resolved: complaints.filter((c) => c.status === "Resolved").length,
   };
+
+  if (loadError) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="bg-white border-b border-slate-200 px-6 py-5">
+          <div className="max-w-5xl mx-auto">
+            <h1 className="text-slate-800">My Complaints</h1>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-red-700 text-sm">{loadError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -51,7 +89,7 @@ export function ResidentComplaintsPage() {
             <div>
               <h1 className="text-slate-800">My Complaints</h1>
               <p className="text-slate-500 text-sm mt-0.5">
-                {residentComplaints.length} total submissions
+                {complaintsLoading ? "Loading..." : `${complaints.length} total submissions`}
               </p>
             </div>
             <button
@@ -68,7 +106,7 @@ export function ResidentComplaintsPage() {
           {/* Status Quick Filters */}
           <div className="flex gap-3 flex-wrap">
             {[
-              { label: "All", value: "All" as const, count: residentComplaints.length, color: "border-slate-300 text-slate-600 bg-white" },
+              { label: "All", value: "All" as const, count: complaints.length, color: "border-slate-300 text-slate-600 bg-white" },
               { label: "Pending", value: "Pending" as const, count: counts.pending, color: "border-amber-300 text-amber-700 bg-amber-50" },
               { label: "In Progress", value: "In Progress" as const, count: counts.inProgress, color: "border-blue-300 text-blue-700 bg-blue-50" },
               { label: "Resolved", value: "Resolved" as const, count: counts.resolved, color: "border-emerald-300 text-emerald-700 bg-emerald-50" },
@@ -137,11 +175,20 @@ export function ResidentComplaintsPage() {
           {/* Results */}
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
-              {filtered.length} complaint{filtered.length !== 1 ? "s" : ""} found
+              {complaintsLoading ? "Loading..." : `${filtered.length} complaint${filtered.length !== 1 ? "s" : ""} found`}
             </p>
           </div>
 
-          {filtered.length === 0 ? (
+          {complaintsLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 animate-pulse">
+                  <div className="h-4 bg-slate-200 rounded w-1/3 mb-3"></div>
+                  <div className="h-3 bg-slate-100 rounded w-2/3"></div>
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
               <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileText className="w-7 h-7 text-slate-400" />
@@ -172,6 +219,15 @@ export function ResidentComplaintsPage() {
                   transition={{ delay: i * 0.05 }}
                   className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition-colors"
                 >
+                  {complaint.image_url && (
+                    <div className="h-40 bg-slate-100 overflow-hidden border-b border-slate-200">
+                      <img
+                        src={complaint.image_url}
+                        alt={complaint.complaint_code}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
                   <div
                     className="p-5 cursor-pointer"
                     onClick={() => setExpandedId(expandedId === complaint.id ? null : complaint.id)}
@@ -180,7 +236,7 @@ export function ResidentComplaintsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {complaint.id}
+                            {complaint.complaint_code}
                           </span>
                           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                             {complaint.category}
@@ -198,7 +254,7 @@ export function ResidentComplaintsPage() {
                           )}
                           <span className="flex items-center gap-1 text-xs text-slate-400">
                             <Calendar className="w-3 h-3" />
-                            {complaint.dateSubmitted}
+                            {new Date(complaint.created_at).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
@@ -224,6 +280,20 @@ export function ResidentComplaintsPage() {
                       >
                         <div className="px-5 pb-5 border-t border-slate-100">
                           <div className="pt-4 space-y-3">
+                            {complaint.image_url && (
+                              <div>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1.5">
+                                  Attachment
+                                </p>
+                                <div className="rounded-lg overflow-hidden bg-slate-50 border border-slate-200 aspect-video flex items-center justify-center">
+                                  <img
+                                    src={complaint.image_url}
+                                    alt="Complaint attachment"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              </div>
+                            )}
                             <div>
                               <p className="text-xs text-slate-500 uppercase tracking-wide mb-1.5">
                                 Full Description

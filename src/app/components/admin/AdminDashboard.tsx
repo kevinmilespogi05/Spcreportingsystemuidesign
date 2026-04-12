@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Filter,
@@ -14,12 +14,12 @@ import {
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Complaint, ComplaintCategory, ComplaintStatus } from "../../data/mockData";
+import { Complaint, ComplaintStatus } from "../../lib/complaintService";
 import { StatusBadge } from "../shared/StatusBadge";
 import { ComplaintDetailPanel } from "./ComplaintDetailPanel";
 import { useApp } from "../../context/AppContext";
 
-const COMPLAINT_CATEGORIES_FILTER: (ComplaintCategory | "All")[] = [
+const COMPLAINT_CATEGORIES_FILTER = [
   "All",
   "Road & Infrastructure",
   "Waste Management",
@@ -29,22 +29,36 @@ const COMPLAINT_CATEGORIES_FILTER: (ComplaintCategory | "All")[] = [
   "Water & Drainage",
   "Public Health",
   "Other",
-];
+] as const;
+type ComplaintCategory = Exclude<(typeof COMPLAINT_CATEGORIES_FILTER)[number], "All">;
 
 const STATUS_FILTER: (ComplaintStatus | "All")[] = ["All", "Pending", "In Progress", "Resolved", "Rejected"];
 
-type SortField = "id" | "residentName" | "category" | "dateSubmitted" | "status";
+type SortField = "complaint_code" | "residentName" | "category" | "created_at" | "status";
 type SortDir = "asc" | "desc";
 
 export function AdminDashboard() {
-  const { complaints } = useApp();
+  const { complaints, complaintsLoading, fetchAllComplaints } = useApp();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<ComplaintCategory | "All">("All");
   const [statusFilter, setStatusFilter] = useState<ComplaintStatus | "All">("All");
-  const [sortField, setSortField] = useState<SortField>("dateSubmitted");
+  const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Fetch all complaints on component mount
+  useEffect(() => {
+    const loadComplaints = async () => {
+      setLoadError(null);
+      const response = await fetchAllComplaints();
+      if (!response.success) {
+        setLoadError(response.error || "Failed to load complaints");
+      }
+    };
+    loadComplaints();
+  }, []);
 
   const stats = useMemo(() => ({
     total: complaints.length,
@@ -59,8 +73,8 @@ export function AdminDashboard() {
       const q = search.toLowerCase();
       result = result.filter(
         (c) =>
-          c.id.toLowerCase().includes(q) ||
-          c.residentName.toLowerCase().includes(q) ||
+          c.complaint_code.toLowerCase().includes(q) ||
+          (c.residentName || "").toLowerCase().includes(q) ||
           c.category.toLowerCase().includes(q) ||
           c.description.toLowerCase().includes(q)
       );
@@ -72,8 +86,15 @@ export function AdminDashboard() {
       result = result.filter((c) => c.status === statusFilter);
     }
     result.sort((a, b) => {
-      const valA = a[sortField] || "";
-      const valB = b[sortField] || "";
+      let valA: any = a[sortField] || "";
+      let valB: any = b[sortField] || "";
+      
+      // Handle date sorting
+      if (sortField === "created_at") {
+        valA = new Date(valA).getTime();
+        valB = new Date(valB).getTime();
+      }
+      
       const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -98,6 +119,23 @@ export function AdminDashboard() {
     );
   };
 
+  if (loadError) {
+    return (
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="bg-white border-b border-slate-200 px-6 py-5 flex-shrink-0">
+            <h1 className="text-slate-800">Complaint Management</h1>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-red-700 text-sm">{loadError}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Main content */}
@@ -113,7 +151,7 @@ export function AdminDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg">
-                {filtered.length} of {complaints.length} complaints
+                {complaintsLoading ? "Loading..." : `${filtered.length} of ${complaints.length} complaints`}
               </span>
             </div>
           </div>
@@ -235,10 +273,10 @@ export function AdminDashboard() {
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/80">
                       {[
-                        { label: "Complaint ID", field: "id" as SortField },
+                        { label: "Complaint ID", field: "complaint_code" as SortField },
                         { label: "Resident", field: "residentName" as SortField },
                         { label: "Category", field: "category" as SortField },
-                        { label: "Date Submitted", field: "dateSubmitted" as SortField },
+                        { label: "Date Submitted", field: "created_at" as SortField },
                         { label: "Status", field: "status" as SortField },
                       ].map((col) => (
                         <th
@@ -271,20 +309,20 @@ export function AdminDashboard() {
                       >
                         <td className="px-4 py-3.5">
                           <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded-md">
-                            {complaint.id}
+                            {complaint.complaint_code}
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 bg-[#1e3a5f]/10 rounded-full flex items-center justify-center flex-shrink-0">
                               <span className="text-[#1e3a5f] text-xs">
-                                {complaint.residentName.charAt(0)}
+                                {(complaint.residentName || "U").charAt(0)}
                               </span>
                             </div>
                             <div>
-                              <p className="text-sm text-slate-800">{complaint.residentName}</p>
+                              <p className="text-sm text-slate-800">{complaint.residentName || "Unknown"}</p>
                               <p className="text-xs text-slate-400 truncate max-w-[140px]">
-                                {complaint.residentEmail}
+                                {complaint.residentEmail || "N/A"}
                               </p>
                             </div>
                           </div>
@@ -295,7 +333,7 @@ export function AdminDashboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-sm text-slate-500">
-                          {complaint.dateSubmitted}
+                          {new Date(complaint.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3.5">
                           <StatusBadge status={complaint.status} size="sm" />

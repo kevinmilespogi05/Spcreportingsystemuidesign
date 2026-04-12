@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -25,43 +25,14 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useApp } from "../../context/AppContext";
-
-const monthlyData = [
-  { month: "Jan", submitted: 14, resolved: 10, inProgress: 3 },
-  { month: "Feb", submitted: 19, resolved: 14, inProgress: 4 },
-  { month: "Mar", submitted: 28, resolved: 20, inProgress: 6 },
-  { month: "Apr", submitted: 22, resolved: 16, inProgress: 5 },
-  { month: "May", submitted: 17, resolved: 12, inProgress: 4 },
-  { month: "Jun", submitted: 31, resolved: 24, inProgress: 5 },
-];
-
-const weeklyData = [
-  { week: "Wk 1", new: 8, closed: 5 },
-  { week: "Wk 2", new: 12, closed: 9 },
-  { week: "Wk 3", new: 7, closed: 11 },
-  { week: "Wk 4", new: 15, closed: 10 },
-];
-
-const categoryChartData = [
-  { category: "Road & Infra", count: 28, color: "#3b82f6" },
-  { category: "Waste Mgmt", count: 22, color: "#10b981" },
-  { category: "Public Safety", count: 18, color: "#f59e0b" },
-  { category: "Noise", count: 15, color: "#8b5cf6" },
-  { category: "Street Light", count: 12, color: "#eab308" },
-  { category: "Water", count: 20, color: "#06b6d4" },
-  { category: "Public Health", count: 14, color: "#ef4444" },
-  { category: "Other", count: 8, color: "#94a3b8" },
-];
-
-const resolutionTimeData = [
-  { category: "Street Lighting", avgDays: 4 },
-  { category: "Noise Complaint", avgDays: 5 },
-  { category: "Public Health", avgDays: 7 },
-  { category: "Waste Management", avgDays: 8 },
-  { category: "Water & Drainage", avgDays: 10 },
-  { category: "Public Safety", avgDays: 12 },
-  { category: "Road & Infrastructure", avgDays: 18 },
-];
+import {
+  calculateMonthlyData,
+  calculateCategoryData,
+  calculateResolutionTime,
+  calculateWeeklyData,
+  calculateKPIMetrics,
+  getDateRangeText,
+} from "../../../lib/analyticsUtils";
 
 const COLORS = {
   Pending: "#f59e0b",
@@ -92,6 +63,13 @@ export function AdminAnalyticsPage() {
   const { complaints } = useApp();
   const [dateRange, setDateRange] = useState("6months");
 
+  // Calculate all analytics data based on actual complaints
+  const monthlyData = useMemo(() => calculateMonthlyData(complaints, dateRange), [complaints, dateRange]);
+  const categoryChartData = useMemo(() => calculateCategoryData(complaints), [complaints]);
+  const resolutionTimeData = useMemo(() => calculateResolutionTime(complaints), [complaints]);
+  const weeklyData = useMemo(() => calculateWeeklyData(complaints), [complaints]);
+  const kpiMetrics = useMemo(() => calculateKPIMetrics(complaints), [complaints]);
+
   const statusData = [
     { name: "Resolved", value: complaints.filter((c) => c.status === "Resolved").length },
     { name: "In Progress", value: complaints.filter((c) => c.status === "In Progress").length },
@@ -102,27 +80,27 @@ export function AdminAnalyticsPage() {
   const kpis = [
     {
       label: "Total Reports",
-      value: complaints.length + 131,
+      value: kpiMetrics.totalReports,
       icon: FileText,
       color: "text-slate-600",
       bg: "bg-slate-100",
       border: "border-slate-200",
-      trend: "+12% vs last month",
+      trend: kpiMetrics.trendPercent + " vs last period",
       trendColor: "text-emerald-600",
     },
     {
       label: "Avg. Resolution Time",
-      value: "9.2 days",
+      value: kpiMetrics.avgResolutionDays,
       icon: Clock,
       color: "text-blue-600",
       bg: "bg-blue-50",
       border: "border-blue-200",
-      trend: "-1.5 days vs last month",
+      trend: kpiMetrics.trendLabel,
       trendColor: "text-emerald-600",
     },
     {
       label: "Resolution Rate",
-      value: `${Math.round((complaints.filter((c) => c.status === "Resolved").length / complaints.length) * 100)}%`,
+      value: kpiMetrics.resolutionRate,
       icon: CheckCircle2,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -131,13 +109,13 @@ export function AdminAnalyticsPage() {
       trendColor: "text-emerald-600",
     },
     {
-      label: "Satisfaction Score",
-      value: "4.2 / 5",
+      label: "Pending & In Progress",
+      value: `${kpiMetrics.pendings + kpiMetrics.inProgress}`,
       icon: TrendingUp,
       color: "text-amber-600",
       bg: "bg-amber-50",
       border: "border-amber-200",
-      trend: "Based on 42 ratings",
+      trend: `${kpiMetrics.pendings} pending, ${kpiMetrics.inProgress} in progress`,
       trendColor: "text-slate-400",
     },
   ];
@@ -150,7 +128,7 @@ export function AdminAnalyticsPage() {
           <div>
             <h1 className="text-slate-800">Reports & Analytics</h1>
             <p className="text-slate-500 text-sm mt-0.5">
-              Performance metrics and complaint trends
+              {getDateRangeText(dateRange)} • {complaints.length} total complaints
             </p>
           </div>
           <div className="flex items-center gap-3">

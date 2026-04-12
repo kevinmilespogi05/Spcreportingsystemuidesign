@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AuthPage } from "./components/auth/AuthPage";
+import { TermsOfServicePage } from "./components/legal/TermsOfServicePage";
+import { PrivacyPolicyPage } from "./components/legal/PrivacyPolicyPage";
 import { ResidentLayout } from "./components/resident/ResidentLayout";
 import { ResidentDashboard } from "./components/resident/ResidentDashboard";
 import { ResidentComplaintsPage } from "./components/resident/ResidentComplaintsPage";
@@ -9,6 +11,7 @@ import { AdminLayout } from "./components/admin/AdminLayout";
 import { AdminOverviewPage } from "./components/admin/AdminOverviewPage";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { AdminResidentsPage } from "./components/admin/AdminResidentsPage";
+import { AdminBannedPage } from "./components/admin/AdminBannedPage";
 import { AdminCategoriesPage } from "./components/admin/AdminCategoriesPage";
 import { AdminAnalyticsPage } from "./components/admin/AdminAnalyticsPage";
 import { AdminSettingsPage } from "./components/admin/AdminSettingsPage";
@@ -21,6 +24,14 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: AuthPage,
+  },
+  {
+    path: "/terms-of-service",
+    Component: TermsOfServicePage,
+  },
+  {
+    path: "/privacy-policy",
+    Component: PrivacyPolicyPage,
   },
   {
     path: "/resident",
@@ -59,6 +70,10 @@ export const router = createBrowserRouter([
       {
         path: "residents",
         Component: AdminResidentsPage,
+      },
+      {
+        path: "banned",
+        Component: AdminBannedPage,
       },
       {
         path: "categories",

@@ -2,7 +2,18 @@ import { useState, useMemo } from "react";
 import { Clock, CheckCircle2, AlertCircle, Plus, Edit2, Search } from "lucide-react";
 import { motion } from "motion/react";
 import { useApp } from "../../context/AppContext";
-import { COMPLAINT_CATEGORIES, ComplaintCategory } from "../../data/mockData";
+
+const COMPLAINT_CATEGORIES = [
+  "Road & Infrastructure",
+  "Waste Management",
+  "Public Safety",
+  "Noise Complaint",
+  "Street Lighting",
+  "Water & Drainage",
+  "Public Health",
+  "Other",
+] as const;
+type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
 
 const categoryIcons: Record<ComplaintCategory, string> = {
   "Road & Infrastructure": "🛣️",
