@@ -12,6 +12,7 @@ import {
   Settings,
   Tag,
   Ban,
+  UserPlus,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { ToastNotification } from "../shared/ToastNotification";
@@ -24,6 +25,7 @@ const navItems = [
   { icon: Ban, label: "Banned Residents", href: "/admin/banned" },
   { icon: Tag, label: "Categories", href: "/admin/categories" },
   { icon: BarChart3, label: "Reports & Analytics", href: "/admin/analytics" },
+  { icon: UserPlus, label: "Create User", href: "/admin/create-user" },
   { icon: Settings, label: "System Settings", href: "/admin/settings" },
 ];
 

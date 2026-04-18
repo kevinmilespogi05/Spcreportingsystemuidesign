@@ -185,6 +185,155 @@ export const registerUser = async (
 };
 
 // Login user
+// Create user as admin - for admin user creation feature
+interface CreateUserAsAdminData {
+  fullName: string;
+  email: string;
+  password: string;
+  userType: "resident" | "admin";
+}
+
+interface CreateUserAsAdminResponse {
+  success: boolean;
+  message: string;
+  error?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    password?: string; // Returned only for admin confirmation
+  };
+}
+
+export const createUserAsAdmin = async (
+  data: CreateUserAsAdminData
+): Promise<CreateUserAsAdminResponse> => {
+  try {
+    // Validate input
+    if (!data.fullName || !data.fullName.trim()) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Full name is required",
+      };
+    }
+
+    if (!data.email || !data.email.trim()) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Email is required",
+      };
+    }
+
+    if (!validateEmail(data.email)) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Please enter a valid email address",
+      };
+    }
+
+    if (!data.password) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Password is required",
+      };
+    }
+
+    const passwordValidation = validatePassword(data.password);
+    if (!passwordValidation.isValid) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: passwordValidation.message,
+      };
+    }
+
+    if (!["resident", "admin"].includes(data.userType)) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Invalid user type",
+      };
+    }
+
+    // Create auth user
+    const { data: authData, error: authError } =
+      await supabase.auth.signUp({
+        email: data.email.toLowerCase(),
+        password: data.password,
+      });
+
+    if (authError) {
+      console.error("Auth error during admin user creation:", authError);
+      if (authError.message.includes("already registered")) {
+        return {
+          success: false,
+          message: "User creation failed",
+          error: "Email is already registered",
+        };
+      }
+      return {
+        success: false,
+        message: "User creation failed",
+        error: authError.message || "An error occurred during user creation",
+      };
+    }
+
+    if (!authData.user) {
+      return {
+        success: false,
+        message: "User creation failed",
+        error: "Failed to create user account",
+      };
+    }
+
+    // Insert resident record with appropriate role
+    const { error: insertError } = await supabase.from("residents").insert([
+      {
+        id: authData.user.id,
+        full_name: data.fullName.trim(),
+        email: data.email.toLowerCase(),
+        role: data.userType,
+        status: "active",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (insertError) {
+      console.error("Insert error during admin user creation:", insertError);
+      return {
+        success: false,
+        message: "User creation failed",
+        error: "Failed to save user information. Please try again.",
+      };
+    }
+
+    return {
+      success: true,
+      message: "User account created successfully",
+      user: {
+        id: authData.user.id,
+        name: data.fullName.trim(),
+        email: data.email.toLowerCase(),
+        role: data.userType,
+        password: data.password, // Return password for admin confirmation
+      },
+    };
+  } catch (error) {
+    console.error("Unexpected error during user creation:", error);
+    return {
+      success: false,
+      message: "User creation failed",
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+
 export const loginUser = async (
   data: LoginData,
   role: "resident" | "admin"

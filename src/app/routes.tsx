@@ -15,6 +15,7 @@ import { AdminBannedPage } from "./components/admin/AdminBannedPage";
 import { AdminCategoriesPage } from "./components/admin/AdminCategoriesPage";
 import { AdminAnalyticsPage } from "./components/admin/AdminAnalyticsPage";
 import { AdminSettingsPage } from "./components/admin/AdminSettingsPage";
+import { AdminCreateUserPage } from "./components/admin/AdminCreateUserPage";
 
 function NotFound() {
   return <Navigate to="/" replace />;
@@ -86,6 +87,10 @@ export const router = createBrowserRouter([
       {
         path: "settings",
         Component: AdminSettingsPage,
+      },
+      {
+        path: "create-user",
+        Component: AdminCreateUserPage,
       },
     ],
   },
