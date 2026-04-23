@@ -13,6 +13,7 @@ import {
   deleteComplaint as complaintServiceDelete,
   banResident as banResidentService,
   unbanResident as unbanResidentService,
+  getAllResidents as getAllResidentsService,
   CreateComplaintData,
   CreateComplaintResponse,
   GetComplaintsResponse,
@@ -22,6 +23,8 @@ import {
   UnbanResidentResponse,
   ComplaintStatus,
   Complaint,
+  ResidentData,
+  GetResidentsResponse,
 } from "../../lib/complaintService";
 
 type UserRole = "resident" | "admin" | null;
@@ -42,6 +45,8 @@ interface AppContextType {
   setCurrentView: (view: string) => void;
   complaints: Complaint[];
   complaintsLoading: boolean;
+  residents: ResidentData[];
+  residentsLoading: boolean;
   createComplaint: (data: CreateComplaintData) => Promise<CreateComplaintResponse>;
   fetchResidentComplaints: (
     status?: ComplaintStatus,
@@ -53,6 +58,7 @@ interface AppContextType {
     category?: string,
     search?: string
   ) => Promise<GetComplaintsResponse>;
+  fetchAllResidents: (search?: string) => Promise<GetResidentsResponse>;
   updateComplaintStatus: (
     complaintId: string,
     status: ComplaintStatus,
@@ -79,6 +85,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentView, setCurrentView] = useState("dashboard");
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [residents, setResidents] = useState<ResidentData[]>([]);
+  const [residentsLoading, setResidentsLoading] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [adminNotifs, setAdminNotifs] = useState<Notification[]>(adminNotifications);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -268,6 +276,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Fetch all residents (for admins)
+  const fetchAllResidents = async (
+    search?: string
+  ): Promise<GetResidentsResponse> => {
+    setResidentsLoading(true);
+    try {
+      const response = await getAllResidentsService(search);
+      if (response.success && response.data) {
+        setResidents(response.data);
+      }
+      return response;
+    } finally {
+      setResidentsLoading(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -277,9 +301,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCurrentView,
         complaints,
         complaintsLoading,
+        residents,
+        residentsLoading,
         createComplaint,
         fetchResidentComplaints,
         fetchAllComplaints,
+        fetchAllResidents,
         updateComplaintStatus,
         deleteComplaint,
         banResident,

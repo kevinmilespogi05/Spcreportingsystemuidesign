@@ -71,6 +71,26 @@ export interface UnbanResidentResponse {
   error?: string;
 }
 
+export interface ResidentData {
+  id: string;
+  full_name: string;
+  email: string;
+  phone_number?: string;
+  address?: string;
+  status: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GetResidentsResponse {
+  success: boolean;
+  data?: ResidentData[];
+  message: string;
+  error?: string;
+  count?: number;
+}
+
 // Helper function to handle lock timeout errors with retry logic
 const isLockTimeoutError = (error: unknown): boolean => {
   if (error instanceof Error) {
@@ -827,6 +847,81 @@ export const unbanResident = async (
     return {
       success: false,
       message: "Failed to unban resident",
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+
+// Get all residents (admin only)
+export const getAllResidents = async (
+  search?: string
+): Promise<GetResidentsResponse> => {
+  try {
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      return {
+        success: false,
+        message: "Failed to fetch residents",
+        error: "You must be logged in",
+      };
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      return {
+        success: false,
+        message: "Access denied",
+        error: "Only admins can view all residents",
+      };
+    }
+
+    // Fetch all residents (excluding admin role)
+    const { data: residents, error: fetchError } = await supabase
+      .from("residents")
+      .select("*")
+      .neq("role", "admin")
+      .order("created_at", { ascending: false });
+
+    if (fetchError) {
+      console.error("Fetch error:", fetchError);
+      return {
+        success: false,
+        message: "Failed to fetch residents",
+        error: fetchError.message || "An error occurred while fetching residents",
+      };
+    }
+
+    let result = residents || [];
+
+    // Apply search filter if provided
+    if (search) {
+      const searchLower = search.toLowerCase();
+      result = result.filter(
+        (r) =>
+          r.full_name?.toLowerCase().includes(searchLower) ||
+          r.email?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return {
+      success: true,
+      data: result,
+      message: "Residents fetched successfully",
+      count: result.length,
+    };
+  } catch (error) {
+    console.error("Unexpected error fetching residents:", error);
+    return {
+      success: false,
+      message: "Failed to fetch residents",
       error: "An unexpected error occurred. Please try again.",
     };
   }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Search, X, Users, Mail, FileText, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Ban, Eye } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../../context/AppContext";
@@ -18,7 +18,7 @@ interface ResidentRecord {
 }
 
 export function AdminResidentsPage() {
-  const { complaints, banResident, setToastMessage } = useApp();
+  const { complaints, residents: dbResidents, residentsLoading, fetchAllResidents, banResident, setToastMessage } = useApp();
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<"name" | "complaints" | "lastSubmitted">("complaints");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -27,34 +27,50 @@ export function AdminResidentsPage() {
   const [banConfirming, setBanConfirming] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
 
+  // Fetch all residents on component mount
+  useEffect(() => {
+    fetchAllResidents();
+  }, []);
+
+  // Build residents with complaint data
   const residents = useMemo<ResidentRecord[]>(() => {
-    const map = new Map<string, ResidentRecord>();
+    // Create a map of complaints by resident_id
+    const complaintsByResident = new Map<string, Complaint[]>();
     complaints.forEach((c) => {
-      const email = c.residentEmail || c.resident_id;
-      const residentId = c.resident_id;
-      
-      if (!map.has(email)) {
-        map.set(email, {
-          id: residentId,
-          name: c.residentName || "Unknown",
-          email: email,
-          status: "active", // Default status
-          complaints: [],
-          pending: 0,
-          inProgress: 0,
-          resolved: 0,
-          lastSubmitted: c.created_at,
-        });
+      if (!complaintsByResident.has(c.resident_id)) {
+        complaintsByResident.set(c.resident_id, []);
       }
-      const rec = map.get(email)!;
-      rec.complaints.push(c);
-      if (c.status === "Pending") rec.pending++;
-      if (c.status === "In Progress") rec.inProgress++;
-      if (c.status === "Resolved") rec.resolved++;
-      if (c.created_at > rec.lastSubmitted) rec.lastSubmitted = c.created_at;
+      complaintsByResident.get(c.resident_id)!.push(c);
     });
-    return Array.from(map.values());
-  }, [complaints]);
+
+    // Map database residents to resident records
+    return dbResidents.map((dbResident) => {
+      const residentComplaints = complaintsByResident.get(dbResident.id) || [];
+      let pending = 0;
+      let inProgress = 0;
+      let resolved = 0;
+      let lastSubmitted = "";
+
+      residentComplaints.forEach((c) => {
+        if (c.status === "Pending") pending++;
+        if (c.status === "In Progress") inProgress++;
+        if (c.status === "Resolved") resolved++;
+        if (c.created_at > lastSubmitted) lastSubmitted = c.created_at;
+      });
+
+      return {
+        id: dbResident.id,
+        name: dbResident.full_name || "Unknown",
+        email: dbResident.email || "",
+        status: dbResident.status || "active",
+        complaints: residentComplaints,
+        pending,
+        inProgress,
+        resolved,
+        lastSubmitted: lastSubmitted || new Date().toISOString(),
+      };
+    });
+  }, [dbResidents, complaints]);
 
   const filtered = useMemo(() => {
     let result = [...residents];
