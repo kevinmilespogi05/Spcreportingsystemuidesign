@@ -10,6 +10,7 @@
 
 # Environment variables
 [build.environment]
+  NODE_ENV = "development"
   NPM_FLAGS = "--include=dev"
   VITE_SUPABASE_URL = "https://dxpwbiniosymofctctrf.supabase.co"
   VITE_CLOUDINARY_CLOUD_NAME = "dzqtdl5aa"
