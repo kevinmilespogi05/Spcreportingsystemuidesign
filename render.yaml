@@ -1,0 +1,29 @@
+# render.yaml - Render Web Service Configuration
+# Deploy your backend to Render using this configuration
+
+services:
+  - type: web
+    name: spc-reporting-backend
+    env: node
+    plan: free  # Change to "starter" for production
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: SUPABASE_URL
+        value: https://dxpwbiniosymofctctrf.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHdiaW5pb3N5bW9mY3RjdHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5NDk5NDIsImV4cCI6MjA5MTUyNTk0Mn0.D9sQqWV6RWr_55xGMoKmRiECniniZ8y69yIUywY1m2Y
+      - key: SUPABASE_SERVICE_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dzqtdl5aa
+      - key: CLOUDINARY_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: CLOUDINARY_API_SECRET
+        sync: false  # Set manually in Render dashboard
+      - key: CORS_ORIGIN
+        value: http://localhost:3000,https://[your-netlify-site].netlify.app
