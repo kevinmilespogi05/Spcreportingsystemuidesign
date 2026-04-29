@@ -18,7 +18,7 @@ interface ResidentRecord {
 }
 
 export function AdminResidentsPage() {
-  const { complaints, residents: dbResidents, residentsLoading, fetchAllResidents, banResident, setToastMessage } = useApp();
+  const { complaints, residents: dbResidents, residentsLoading, fetchAllResidents, banResident, unbanResident, setToastMessage } = useApp();
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<"name" | "complaints" | "lastSubmitted">("complaints");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -99,18 +99,32 @@ export function AdminResidentsPage() {
 
   const handleBanResident = async () => {
     if (!residentToBan) return;
-    
     setBanConfirming(true);
     try {
       const response = await banResident(residentToBan.id);
       if (response.success) {
         setToastMessage(response.message);
         setResidentToBan(null);
+        await fetchAllResidents(); // refresh list
       } else {
         setToastMessage(response.error || response.message);
       }
     } finally {
       setBanConfirming(false);
+    }
+  };
+
+  const handleUnbanResident = async (resident: ResidentRecord) => {
+    try {
+      const response = await unbanResident(resident.id);
+      if (response.success) {
+        setToastMessage(response.message);
+        await fetchAllResidents(); // refresh list so status badge updates
+      } else {
+        setToastMessage(response.error || response.message);
+      }
+    } catch {
+      setToastMessage("Failed to unban resident. Please try again.");
     }
   };
 
@@ -319,7 +333,18 @@ export function AdminResidentsPage() {
                           </td>
                           <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-2 justify-end">
-                              {resident.status !== "banned" && (
+                              {resident.status === "banned" ? (
+                                /* Unban button */
+                                <button
+                                  onClick={() => handleUnbanResident(resident)}
+                                  className="flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg transition-colors"
+                                  title="Unban resident"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  Unban
+                                </button>
+                              ) : (
+                                /* Ban button */
                                 <button
                                   onClick={() => setResidentToBan(resident)}
                                   className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -418,7 +443,8 @@ export function AdminResidentsPage() {
                   Are you sure you want to ban <span className="font-semibold text-slate-900">{residentToBan.name}</span>?
                 </p>
                 <p className="text-sm text-slate-500">
-                  This resident will no longer be able to submit or view complaints. This action can be reversed by updating their status directly in the database.
+                  This resident will no longer be able to submit or view complaints.
+                  You can restore their access at any time using the <strong>Unban</strong> button.
                 </p>
               </div>
               <div className="p-6 border-t border-slate-100 flex gap-3">

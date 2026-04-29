@@ -45,6 +45,43 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
+  /**
+   * Upload a file to Cloudinary and update imageUrl state.
+   * Returns the secure_url on success, or null on failure.
+   */
+  const uploadFile = async (fileToUpload: File): Promise<string | null> => {
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      console.log("[ComplaintModal] Starting upload:", { cloudName, uploadPreset, fileName: fileToUpload.name });
+      const response = await uploadToCloudinary(fileToUpload, cloudName, uploadPreset);
+      console.log("[ComplaintModal] Upload response:", response);
+
+      if (response.success && response.secure_url) {
+        setImageUrl(response.secure_url);
+        console.log("[ComplaintModal] Upload succeeded, imageUrl set:", response.secure_url);
+        return response.secure_url;
+      } else {
+        const errorMsg = response.error || "Failed to upload image";
+        console.error("[ComplaintModal] Upload failed:", errorMsg);
+        setUploadError(errorMsg);
+        return null;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Upload failed. Please try again.";
+      console.error("[ComplaintModal] Upload error:", error);
+      setUploadError(errorMsg);
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  /**
+   * Auto-upload to Cloudinary as soon as the user selects a file.
+   * This ensures imageUrl is populated before the user reaches the Submit step.
+   */
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -56,47 +93,22 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
       return;
     }
 
-    // Clear previous errors
+    // Clear previous state
     setUploadError(null);
+    setImageUrl(null);
     setFile(selectedFile);
 
-    // Generate preview
+    // Generate local data-URL preview immediately for visual feedback
     try {
       const previewUrl = await generatePreviewUrl(selectedFile);
       setPreview(previewUrl);
-    } catch (error) {
+    } catch {
       setUploadError("Could not generate preview");
+      return;
     }
-  };
 
-  const handleUploadImage = async () => {
-    if (!file) return;
-
-    setIsUploading(true);
-    setUploadError(null);
-
-    try {
-      console.log("Starting upload with:", { cloudName, uploadPreset });
-      
-      const response = await uploadToCloudinary(file, cloudName, uploadPreset);
-
-      console.log("Upload response:", response);
-
-      if (response.success && response.secure_url) {
-        setImageUrl(response.secure_url);
-        setToastMessage("Image uploaded successfully");
-      } else {
-        const errorMsg = response.error || "Failed to upload image";
-        console.error("Upload failed:", errorMsg);
-        setUploadError(errorMsg);
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Upload failed. Please try again.";
-      console.error("Upload error:", error);
-      setUploadError(errorMsg);
-    } finally {
-      setIsUploading(false);
-    }
+    // Auto-upload to Cloudinary right away — no manual button click needed
+    await uploadFile(selectedFile);
   };
 
   const handleRemoveImage = () => {
@@ -104,6 +116,8 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
     setPreview(null);
     setImageUrl(null);
     setUploadError(null);
+    // Reset the file input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleNext = () => {
@@ -117,17 +131,29 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   const canProceed = () => {
     if (step === 1) return category !== "";
     if (step === 2) return description.trim().length >= 20;
+    // Block navigation on step 3 while uploading to ensure imageUrl is set
+    if (step === 3) return !isUploading;
     return true;
   };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      // Safety net: if a file was selected but auto-upload failed or errored,
+      // attempt upload one more time before saving to Supabase.
+      let finalImageUrl = imageUrl;
+      if (file && !finalImageUrl && !isUploading) {
+        console.log("[ComplaintModal] Retrying upload before submit...");
+        finalImageUrl = await uploadFile(file);
+      }
+
+      console.log("[ComplaintModal] Submitting complaint with imageUrl:", finalImageUrl);
+
       const response = await createComplaint({
         category: category as ComplaintCategory,
         description,
         location: location || undefined,
-        imageUrl: imageUrl || undefined,
+        imageUrl: finalImageUrl || undefined,
       });
 
       if (response.success) {
@@ -307,10 +333,11 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
               >
                 <h3 className="text-slate-800 mb-1">Add Attachments</h3>
                 <p className="text-slate-500 text-sm mb-5">
-                  Upload photos or documents to support your complaint (optional)
+                  Upload a photo to support your complaint (optional)
                 </p>
 
-                {!preview && !imageUrl ? (
+                {!preview ? (
+                  /* No file selected yet — show drop zone */
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-[#1e3a5f]/50 hover:bg-slate-50 transition-all group"
@@ -318,61 +345,60 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                     <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-[#1e3a5f]/10 transition-colors">
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#1e3a5f] transition-colors" />
                     </div>
-                    <p className="text-slate-600 text-sm">Click to upload or drag & drop</p>
-                    <p className="text-slate-400 text-xs mt-1">PNG, JPG, GIF, WebP or PDF up to 5MB</p>
+                    <p className="text-slate-600 text-sm">Click to upload or drag &amp; drop</p>
+                    <p className="text-slate-400 text-xs mt-1">PNG, JPG, GIF, WebP up to 5MB</p>
                   </div>
                 ) : (
+                  /* File selected — show preview + upload status */
                   <div className="space-y-4">
                     {/* Image Preview */}
                     <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex items-center justify-center">
-                      {preview ? (
-                        <img
-                          src={preview}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-slate-400">Loading preview...</div>
+                      <img
+                        src={preview}
+                        alt="Preview"
+                        className={`w-full h-full object-cover transition-opacity ${isUploading ? "opacity-60" : "opacity-100"}`}
+                      />
+                      {/* Uploading overlay */}
+                      {isUploading && (
+                        <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center gap-2">
+                          <Loader className="w-7 h-7 text-white animate-spin" />
+                          <span className="text-white text-sm font-medium">Uploading to cloud...</span>
+                        </div>
                       )}
                     </div>
 
-                    {/* Upload Status */}
-                    {!imageUrl ? (
-                      <div className="space-y-3">
-                        {uploadError && (
-                          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-700">{uploadError}</p>
-                          </div>
-                        )}
-                        <button
-                          onClick={handleUploadImage}
-                          disabled={isUploading}
-                          className="w-full flex items-center justify-center gap-2 text-sm bg-[#1e3a5f] hover:bg-[#162d4a] text-white py-2 px-4 rounded-xl transition-all disabled:opacity-70"
-                        >
-                          {isUploading ? (
-                            <>
-                              <Loader className="w-4 h-4 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4" />
-                              Upload Image
-                            </>
-                          )}
-                        </button>
+                    {/* Upload status badge */}
+                    {isUploading ? (
+                      <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                        <Loader className="w-4 h-4 text-blue-600 animate-spin flex-shrink-0" />
+                        <span className="text-sm text-blue-700">Uploading image to cloud storage…</span>
                       </div>
-                    ) : (
+                    ) : imageUrl ? (
                       <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                         <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                         <span className="text-sm text-emerald-700">Image uploaded successfully</span>
                       </div>
-                    )}
+                    ) : uploadError ? (
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-700">{uploadError}</p>
+                        </div>
+                        {/* Retry button — shown only on upload error */}
+                        <button
+                          onClick={() => file && uploadFile(file)}
+                          className="w-full flex items-center justify-center gap-2 text-sm bg-[#1e3a5f] hover:bg-[#162d4a] text-white py-2 px-4 rounded-xl transition-all"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Retry Upload
+                        </button>
+                      </div>
+                    ) : null}
 
                     <button
                       onClick={handleRemoveImage}
-                      className="w-full text-sm border border-slate-200 text-slate-600 hover:text-slate-700 hover:bg-slate-50 py-2 px-4 rounded-xl transition-all"
+                      disabled={isUploading}
+                      className="w-full text-sm border border-slate-200 text-slate-600 hover:text-slate-700 hover:bg-slate-50 py-2 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Change Image
                     </button>
@@ -383,7 +409,7 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept="image/*,.pdf"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
                   className="hidden"
                 />
 
@@ -401,12 +427,13 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3 className="text-slate-800 mb-1">Review & Submit</h3>
+                <h3 className="text-slate-800 mb-1">Review &amp; Submit</h3>
                 <p className="text-slate-500 text-sm mb-5">
                   Confirm your complaint details before submitting
                 </p>
 
                 <div className="space-y-3">
+                  {/* Show the Cloudinary-hosted image in the review step */}
                   {imageUrl && (
                     <div className="rounded-xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video flex items-center justify-center">
                       <img
@@ -414,6 +441,17 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                         alt="Complaint attachment"
                         className="w-full h-full object-cover"
                       />
+                    </div>
+                  )}
+
+                  {/* Fallback: local preview while upload is still running */}
+                  {!imageUrl && preview && isUploading && (
+                    <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 aspect-video">
+                      <img src={preview} alt="Uploading..." className="w-full h-full object-cover opacity-60" />
+                      <div className="absolute inset-0 flex items-center justify-center gap-2">
+                        <Loader className="w-5 h-5 animate-spin text-slate-600" />
+                        <span className="text-slate-700 text-sm">Uploading…</span>
+                      </div>
                     </div>
                   )}
 
@@ -435,6 +473,15 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                         <div className="flex justify-between items-start">
                           <span className="text-xs text-slate-500 uppercase tracking-wide">Location</span>
                           <span className="text-sm text-slate-800 text-right">{location}</span>
+                        </div>
+                      </>
+                    )}
+                    {imageUrl && (
+                      <>
+                        <div className="h-px bg-slate-200" />
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs text-slate-500 uppercase tracking-wide">Attachment</span>
+                          <span className="text-sm text-emerald-600">✓ Image attached</span>
                         </div>
                       </>
                     )}
@@ -480,13 +527,18 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isUploading}
               className="flex items-center gap-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-5 rounded-xl transition-all disabled:opacity-70"
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Submitting...
+                </>
+              ) : isUploading ? (
+                <>
+                  <Loader className="w-4 h-4 animate-spin" />
+                  Uploading...
                 </>
               ) : (
                 <>

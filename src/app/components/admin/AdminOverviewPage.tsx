@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   FileText,
@@ -18,6 +18,19 @@ import { motion } from "motion/react";
 import { StatusBadge } from "../shared/StatusBadge";
 import { useApp } from "../../context/AppContext";
 
+// Helper function to format date
+const formatDate = (dateString: string) => {
+  try {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return 'Invalid date';
+  }
+};
+
 const categoryColors: Record<string, string> = {
   "Road & Infrastructure": "bg-blue-500",
   "Waste Management": "bg-emerald-500",
@@ -30,8 +43,15 @@ const categoryColors: Record<string, string> = {
 };
 
 export function AdminOverviewPage() {
-  const { complaints } = useApp();
+  const { complaints, fetchAllComplaints, user } = useApp();
   const navigate = useNavigate();
+
+  // Fetch all complaints on component mount
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchAllComplaints();
+    }
+  }, [user, fetchAllComplaints]);
 
   const stats = useMemo(() => ({
     total: complaints.length,
@@ -54,7 +74,7 @@ export function AdminOverviewPage() {
   }, [complaints]);
 
   const recentComplaints = useMemo(
-    () => [...complaints].sort((a, b) => b.dateSubmitted.localeCompare(a.dateSubmitted)).slice(0, 5),
+    () => [...complaints].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5),
     [complaints]
   );
 
@@ -179,19 +199,19 @@ export function AdminOverviewPage() {
                   onClick={() => navigate("/admin/complaints")}
                 >
                   <div className="w-8 h-8 bg-[#1e3a5f]/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-[#1e3a5f] text-xs">{c.residentName.charAt(0)}</span>
+                    <span className="text-[#1e3a5f] text-xs">{(c.residentName ?? "?").charAt(0)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                         {c.id}
                       </span>
-                      <span className="text-xs text-slate-500 truncate">{c.residentName}</span>
+                      <span className="text-xs text-slate-500 truncate">{c.residentName ?? "Unknown"}</span>
                     </div>
                     <p className="text-xs text-slate-600 truncate">{c.category}</p>
                     <div className="flex items-center gap-1 mt-0.5">
                       <Calendar className="w-3 h-3 text-slate-400" />
-                      <span className="text-xs text-slate-400">{c.dateSubmitted}</span>
+                      <span className="text-xs text-slate-400">{formatDate(c.created_at)}</span>
                     </div>
                   </div>
                   <StatusBadge status={c.status} size="sm" />
@@ -280,7 +300,7 @@ export function AdminOverviewPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-slate-400 flex-shrink-0">{c.dateSubmitted}</span>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(c.created_at)}</span>
                   </div>
                 ))
               )}

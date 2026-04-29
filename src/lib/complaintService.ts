@@ -926,3 +926,85 @@ export const getAllResidents = async (
     };
   }
 };
+
+// ─── Public / Community Complaints ────────────────────────────────────────────
+// Returns all complaints visible to any authenticated user (no admin role required).
+// Used by the Community Complaints page in the resident portal.
+export const getPublicComplaints = async (
+  status?: ComplaintStatus,
+  category?: string,
+  search?: string
+): Promise<GetComplaintsResponse> => {
+  try {
+    // Ensure the user is authenticated
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      return {
+        success: false,
+        message: "Failed to fetch complaints",
+        error: "You must be logged in",
+      };
+    }
+
+    let query = supabase
+      .from("complaints")
+      .select(
+        `
+        *,
+        residents:resident_id(full_name)
+      `,
+        { count: "exact" }
+      )
+      .order("created_at", { ascending: false });
+
+    if (status) query = query.eq("status", status);
+    if (category && category !== "All") query = query.eq("category", category);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error("Public fetch error:", error);
+      return {
+        success: false,
+        message: "Failed to fetch complaints",
+        error: error.message || "An error occurred while fetching complaints",
+      };
+    }
+
+    // Map the joined residents row into the flat residentName field
+    let complaints: Complaint[] = (data || []).map((c: any) => ({
+      ...c,
+      residentName: c.residents?.full_name || "Anonymous",
+    }));
+
+    if (search) {
+      const q = search.toLowerCase();
+      complaints = complaints.filter(
+        (c) =>
+          c.complaint_code.toLowerCase().includes(q) ||
+          c.category.toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q) ||
+          (c.location ?? "").toLowerCase().includes(q) ||
+          (c.residentName ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    return {
+      success: true,
+      data: complaints,
+      message: "Community complaints fetched successfully",
+      count: complaints.length,
+    };
+  } catch (error) {
+    console.error("Unexpected error fetching public complaints:", error);
+    return {
+      success: false,
+      message: "Failed to fetch complaints",
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+

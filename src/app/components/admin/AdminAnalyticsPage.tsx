@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -60,8 +60,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function AdminAnalyticsPage() {
-  const { complaints } = useApp();
+  const { complaints, fetchAllComplaints, user } = useApp();
   const [dateRange, setDateRange] = useState("6months");
+
+  // Fetch all complaints on component mount
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchAllComplaints();
+    }
+  }, [user, fetchAllComplaints]);
 
   // Calculate all analytics data based on actual complaints
   const monthlyData = useMemo(() => calculateMonthlyData(complaints, dateRange), [complaints, dateRange]);

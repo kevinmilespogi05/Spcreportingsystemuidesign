@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
   FileText,
+  Users,
   LogOut,
   Shield,
   Menu,
@@ -15,10 +16,11 @@ import { ToastNotification } from "../shared/ToastNotification";
 import { useApp } from "../../context/AppContext";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/resident" },
-  { icon: FileText, label: "My Complaints", href: "/resident/complaints" },
-  { icon: HelpCircle, label: "Help & Support", href: "/resident/help" },
-  { icon: Settings, label: "Settings", href: "/resident/settings" },
+  { icon: LayoutDashboard, label: "Dashboard",             href: "/resident" },
+  { icon: FileText,        label: "My Complaints",         href: "/resident/complaints" },
+  { icon: Users,           label: "Community Complaints",  href: "/resident/community" },
+  { icon: HelpCircle,      label: "Help & Support",        href: "/resident/help" },
+  { icon: Settings,        label: "Settings",              href: "/resident/settings" },
 ];
 
 export function ResidentLayout() {

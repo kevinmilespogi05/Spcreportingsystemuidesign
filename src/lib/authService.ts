@@ -117,20 +117,45 @@ export const registerUser = async (
       };
     }
 
-    // Create auth user - Supabase will handle duplicate email errors
+    const normalizedEmail = data.email.toLowerCase().trim();
+
+    // ── Duplicate email pre-check ──────────────────────────────────────────
+    // Query the residents table before attempting auth.signUp.
+    // Supabase auth.signUp silently succeeds on duplicate emails when
+    // email confirmation is disabled, so we must check explicitly.
+    const { data: existing, error: lookupError } = await supabase
+      .from("residents")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error("Email lookup error:", lookupError);
+      // Non-fatal: continue with signup if lookup fails unexpectedly
+    } else if (existing) {
+      return {
+        success: false,
+        message: "Registration failed",
+        error: "This email address is already registered. Please sign in instead.",
+      };
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
+    // Create auth user
     const { data: authData, error: authError } =
       await supabase.auth.signUp({
-        email: data.email.toLowerCase(),
+        email: normalizedEmail,
         password: data.password,
       });
 
     if (authError) {
       console.error("Auth error:", authError);
-      if (authError.message.includes("already registered")) {
+      const msg = authError.message.toLowerCase();
+      if (msg.includes("already registered") || msg.includes("already exists")) {
         return {
           success: false,
           message: "Registration failed",
-          error: "Email is already registered. Please sign in instead.",
+          error: "This email address is already registered. Please sign in instead.",
         };
       }
       return {
@@ -153,7 +178,7 @@ export const registerUser = async (
       {
         id: authData.user.id,
         full_name: data.fullName.trim(),
-        email: data.email.toLowerCase(),
+        email: normalizedEmail,
         role: "resident",
         status: "active",
         created_at: new Date().toISOString(),
@@ -163,6 +188,14 @@ export const registerUser = async (
 
     if (insertError) {
       console.error("Insert error:", insertError);
+      // Handle unique constraint violation from DB as a fallback
+      if (insertError.code === "23505") {
+        return {
+          success: false,
+          message: "Registration failed",
+          error: "This email address is already registered. Please sign in instead.",
+        };
+      }
       return {
         success: false,
         message: "Registration failed",
@@ -183,6 +216,7 @@ export const registerUser = async (
     };
   }
 };
+
 
 // Login user
 // Create user as admin - for admin user creation feature

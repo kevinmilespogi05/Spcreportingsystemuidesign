@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Eye, EyeOff, Shield, FileText, Users, BarChart3, ChevronRight, Lock, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Shield, FileText, Users, BarChart3, ChevronRight, Lock, AlertCircle, Ban } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "../../context/AppContext";
 import { registerUser, loginUser, validateEmail, validatePassword } from "../../../lib/authService";
@@ -190,11 +190,10 @@ export function AuthPage() {
                 <button
                   key={t}
                   onClick={() => { setTab(t); setErrorMessage(""); setSuccessMessage(""); }}
-                  className={`flex-1 py-2 rounded-lg text-sm transition-all duration-200 ${
-                    tab === t
+                  className={`flex-1 py-2 rounded-lg text-sm transition-all duration-200 ${tab === t
                       ? "bg-white text-slate-800 shadow-sm font-medium"
                       : "text-slate-500 hover:text-slate-700"
-                  }`}
+                    }`}
                 >
                   {t === "login" ? "Sign In" : "Create Account"}
                 </button>
@@ -215,13 +214,35 @@ export function AuthPage() {
                     <p className="text-slate-500 text-sm">Sign in to access your account</p>
                   </div>
 
-                  {/* Error Message */}
-                  {errorMessage && (
-                    <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-700">{errorMessage}</p>
-                    </div>
-                  )}
+                  {/* Error / Ban notification */}
+                  {errorMessage && (() => {
+                    const isBanned = errorMessage.toLowerCase().includes("banned");
+                    return isBanned ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-5 rounded-xl border border-amber-300 bg-amber-50 overflow-hidden"
+                      >
+                        <div className="flex items-center gap-2 bg-amber-100 px-4 py-2.5 border-b border-amber-200">
+                          <Ban className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                          <p className="text-sm font-semibold text-amber-800">Account Suspended</p>
+                        </div>
+                        <div className="px-4 py-3 space-y-1">
+                          <p className="text-sm text-amber-800">
+                            Your account has been <strong>banned</strong> by an administrator.
+                          </p>
+                          <p className="text-xs text-amber-600 leading-relaxed">
+                            You are no longer able to access the SPC Reporting System. If you believe this is a mistake, please contact your barangay office or local government unit for assistance.
+                          </p>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200 flex gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-700">{errorMessage}</p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Role Selector */}
                   <div className="mb-5">
@@ -232,11 +253,10 @@ export function AuthPage() {
                           key={r}
                           type="button"
                           onClick={() => setRole(r)}
-                          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                            role === r
+                          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${role === r
                               ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
                               : "border-slate-200 text-slate-500 hover:border-slate-300"
-                          }`}
+                            }`}
                         >
                           {r === "resident" ? (
                             <Users className="w-4 h-4" />
@@ -440,7 +460,7 @@ export function AuthPage() {
           </div>
 
           <p className="text-center text-xs text-slate-400 mt-6">
-            © 2024 Municipal Government · Official Platform
+            © 2026 Municipal Government · Official Platform
           </p>
         </div>
       </div>

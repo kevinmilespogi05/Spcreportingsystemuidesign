@@ -5,6 +5,7 @@ import { PrivacyPolicyPage } from "./components/legal/PrivacyPolicyPage";
 import { ResidentLayout } from "./components/resident/ResidentLayout";
 import { ResidentDashboard } from "./components/resident/ResidentDashboard";
 import { ResidentComplaintsPage } from "./components/resident/ResidentComplaintsPage";
+import { CommunityComplaintsPage } from "./components/resident/CommunityComplaintsPage";
 import { ResidentHelpPage } from "./components/resident/ResidentHelpPage";
 import { ResidentSettingsPage } from "./components/resident/ResidentSettingsPage";
 import { AdminLayout } from "./components/admin/AdminLayout";
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
       {
         path: "complaints",
         Component: ResidentComplaintsPage,
+      },
+      {
+        path: "community",
+        Component: CommunityComplaintsPage,
       },
       {
         path: "help",

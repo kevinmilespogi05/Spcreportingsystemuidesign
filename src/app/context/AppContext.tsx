@@ -9,6 +9,7 @@ import {
   createComplaint as complaintServiceCreate,
   getResidentComplaints,
   getAllComplaints,
+  getPublicComplaints,
   updateComplaintStatus as complaintServiceUpdate,
   deleteComplaint as complaintServiceDelete,
   banResident as banResidentService,
@@ -54,6 +55,11 @@ interface AppContextType {
     search?: string
   ) => Promise<GetComplaintsResponse>;
   fetchAllComplaints: (
+    status?: ComplaintStatus,
+    category?: string,
+    search?: string
+  ) => Promise<GetComplaintsResponse>;
+  fetchPublicComplaints: (
     status?: ComplaintStatus,
     category?: string,
     search?: string
@@ -208,6 +214,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Fetch all community complaints (for residents — no admin role required)
+  const fetchPublicComplaints = async (
+    status?: ComplaintStatus,
+    category?: string,
+    search?: string
+  ): Promise<GetComplaintsResponse> => {
+    setComplaintsLoading(true);
+    try {
+      const response = await getPublicComplaints(status, category, search);
+      if (response.success && response.data) {
+        setComplaints(response.data);
+      }
+      return response;
+    } finally {
+      setComplaintsLoading(false);
+    }
+  };
+
   // Update complaint status and remarks
   const updateComplaintStatus = async (
     complaintId: string,
@@ -306,6 +330,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createComplaint,
         fetchResidentComplaints,
         fetchAllComplaints,
+        fetchPublicComplaints,
         fetchAllResidents,
         updateComplaintStatus,
         deleteComplaint,

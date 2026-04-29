@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Clock, CheckCircle2, AlertCircle, Plus, Edit2, Search } from "lucide-react";
 import { motion } from "motion/react";
 import { useApp } from "../../context/AppContext";
@@ -37,10 +37,30 @@ const categoryColors: Record<ComplaintCategory, { bg: string; border: string; te
   Other: { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-600", bar: "bg-slate-400" },
 };
 
+// Helper function to format date
+const formatDate = (dateString: string) => {
+  try {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return 'Invalid date';
+  }
+};
+
 export function AdminCategoriesPage() {
-  const { complaints } = useApp();
+  const { complaints, fetchAllComplaints, user } = useApp();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ComplaintCategory | null>(null);
+
+  // Fetch all complaints on component mount
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchAllComplaints();
+    }
+  }, [user, fetchAllComplaints]);
 
   const categoryStats = useMemo(() => {
     return COMPLAINT_CATEGORIES.map((cat) => {
@@ -260,7 +280,7 @@ export function AdminCategoriesPage() {
                       }`}>{c.status}</span>
                     </div>
                     <p className="text-xs text-slate-600 truncate">{c.residentName}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{c.dateSubmitted}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{formatDate(c.created_at)}</p>
                   </div>
                 ))}
                 {selectedStats.complaints.length === 0 && (
