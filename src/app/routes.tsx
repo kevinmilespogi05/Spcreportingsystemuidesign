@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { AuthPage } from "./components/auth/AuthPage";
+import { LandingPage } from "./components/landing/LandingPage";
 import { TermsOfServicePage } from "./components/legal/TermsOfServicePage";
 import { PrivacyPolicyPage } from "./components/legal/PrivacyPolicyPage";
 import { ResidentLayout } from "./components/resident/ResidentLayout";
@@ -25,6 +26,10 @@ function NotFound() {
 export const router = createBrowserRouter([
   {
     path: "/",
+    Component: LandingPage,
+  },
+  {
+    path: "/login",
     Component: AuthPage,
   },
   {

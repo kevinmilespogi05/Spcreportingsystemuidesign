@@ -3,12 +3,25 @@
   command = "npm run build"
   publish = "dist"
 
+# Netlify Functions directory
+[functions]
+  directory = "netlify/functions"
+
+# ── API Routes (must come BEFORE the catch-all /* redirect) ──────────────────
+# Routes /api/complaints/stats → Netlify serverless function
+# The function uses SUPABASE_SERVICE_ROLE_KEY set in the Netlify dashboard
+[[redirects]]
+  from = "/api/complaints/stats"
+  to = "/.netlify/functions/complaints-stats"
+  status = 200
+
+# ── SPA catch-all (must be LAST) ──────────────────────────────────────────────
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Environment variables
+# Environment variables (public/build-time only — secrets go in Netlify dashboard)
 [build.environment]
   VITE_SUPABASE_URL = "https://dxpwbiniosymofctctrf.supabase.co"
   VITE_CLOUDINARY_CLOUD_NAME = "dzqtdl5aa"
@@ -25,3 +38,4 @@
   for = "/"
   [headers.values]
     Cache-Control = "public, max-age=3600, must-revalidate"
+

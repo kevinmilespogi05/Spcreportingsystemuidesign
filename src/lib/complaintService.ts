@@ -91,6 +91,11 @@ export interface GetResidentsResponse {
   count?: number;
 }
 
+export interface ComplaintCounts {
+  total: number;
+  resolved: number;
+}
+
 // Helper function to handle lock timeout errors with retry logic
 const isLockTimeoutError = (error: unknown): boolean => {
   if (error instanceof Error) {
@@ -1005,6 +1010,37 @@ export const getPublicComplaints = async (
       message: "Failed to fetch complaints",
       error: "An unexpected error occurred. Please try again.",
     };
+  }
+};
+
+export const getComplaintCounts = async (): Promise<ComplaintCounts> => {
+  try {
+    const { data: totalData, count: totalCount, error: totalError } = await supabase
+      .from("complaints")
+      .select("*", { count: "exact" });
+
+    if (totalError) {
+      console.error("Failed to fetch total complaint count:", totalError);
+      return { total: 0, resolved: 0 };
+    }
+
+    const { data: resolvedData, count: resolvedCount, error: resolvedError } = await supabase
+      .from("complaints")
+      .select("*", { count: "exact" })
+      .eq("status", "Resolved");
+
+    if (resolvedError) {
+      console.error("Failed to fetch resolved complaint count:", resolvedError);
+      return { total: totalCount ?? totalData?.length ?? 0, resolved: 0 };
+    }
+
+    const total = totalCount ?? totalData?.length ?? 0;
+    const resolved = resolvedCount ?? resolvedData?.length ?? 0;
+
+    return { total, resolved };
+  } catch (error) {
+    console.error("Unexpected error fetching complaint counts:", error);
+    return { total: 0, resolved: 0 };
   }
 };
 
