@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Eye, EyeOff, Shield, FileText, Users, BarChart3, ChevronRight, Lock, AlertCircle, Ban } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -28,8 +28,15 @@ export function AuthPage() {
     password: "",
   });
 
-  const { setUser } = useApp();
+  const { user, setUser } = useApp();
   const navigate = useNavigate();
+
+  // If already authenticated, redirect to the appropriate dashboard
+  useEffect(() => {
+    if (user) {
+      navigate(user.role === "admin" ? "/admin" : "/resident", { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
