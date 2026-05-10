@@ -34,6 +34,31 @@ import {
   getDateRangeText,
 } from "../../../lib/analyticsUtils";
 
+type AnalyticsSummary = {
+  executiveSummary: string;
+  keyFindings: string[];
+  topConcerns: string[];
+  recommendations: string[];
+  trend: "up" | "flat" | "down";
+};
+
+const DEFAULT_SUMMARY: AnalyticsSummary = {
+  executiveSummary:
+    "Complaint activity is stable with opportunities to reduce pending backlogs through targeted interventions.",
+  keyFindings: [
+    "Most reports are concentrated in a small number of recurring categories.",
+    "Pending complaints indicate capacity pressure in peak reporting periods.",
+    "Resolution performance improves when triage is completed within 24 hours.",
+  ],
+  topConcerns: ["Backlog growth in high-volume categories", "Delayed first-response times"],
+  recommendations: [
+    "Assign rotating rapid-response teams for top recurring categories.",
+    "Automate routing and prioritization for high-severity complaints.",
+    "Review unresolved cases older than 7 days in weekly operations meetings.",
+  ],
+  trend: "flat",
+};
+
 const COLORS = {
   Pending: "#f59e0b",
   "In Progress": "#3b82f6",
@@ -62,6 +87,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function AdminAnalyticsPage() {
   const { complaints, fetchAllComplaints, user } = useApp();
   const [dateRange, setDateRange] = useState("6months");
+  const [aiSummary, setAiSummary] = useState<AnalyticsSummary>(DEFAULT_SUMMARY);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Fetch all complaints on component mount
   useEffect(() => {
@@ -70,12 +98,81 @@ export function AdminAnalyticsPage() {
     }
   }, [user, fetchAllComplaints]);
 
-  // Calculate all analytics data based on actual complaints
   const monthlyData = useMemo(() => calculateMonthlyData(complaints, dateRange), [complaints, dateRange]);
   const categoryChartData = useMemo(() => calculateCategoryData(complaints), [complaints]);
   const resolutionTimeData = useMemo(() => calculateResolutionTime(complaints), [complaints]);
   const weeklyData = useMemo(() => calculateWeeklyData(complaints), [complaints]);
   const kpiMetrics = useMemo(() => calculateKPIMetrics(complaints), [complaints]);
+
+  const summaryStats = useMemo(() => {
+    const categoryCounts = categoryChartData.map(({ category, count }) => ({ category, count }));
+    const statusCounts = {
+      resolved: complaints.filter((c) => c.status === "Resolved").length,
+      inProgress: complaints.filter((c) => c.status === "In Progress").length,
+      pending: complaints.filter((c) => c.status === "Pending").length,
+      rejected: complaints.filter((c) => c.status === "Rejected").length,
+    };
+
+    return {
+      totalComplaints: complaints.length,
+      statusCounts,
+      categoryCounts,
+      averageResolutionDays: kpiMetrics.avgResolutionDays,
+      resolutionRate: kpiMetrics.resolutionRate,
+      monthlyData,
+      weeklyData,
+    };
+  }, [complaints, categoryChartData, kpiMetrics, monthlyData, weeklyData]);
+
+  const summaryStatsKey = useMemo(() => JSON.stringify(summaryStats), [summaryStats]);
+
+  useEffect(() => {
+    if (!complaints.length) {
+      setAiSummary(DEFAULT_SUMMARY);
+      setSummaryError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const fetchSummary = async () => {
+      setIsSummaryLoading(true);
+      setSummaryError(null);
+
+      try {
+        const response = await fetch("/api/analytics-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dateRange: getDateRangeText(dateRange),
+            stats: summaryStats,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        setAiSummary({
+          executiveSummary: data.executiveSummary || DEFAULT_SUMMARY.executiveSummary,
+          keyFindings: Array.isArray(data.keyFindings) ? data.keyFindings : DEFAULT_SUMMARY.keyFindings,
+          topConcerns: Array.isArray(data.topConcerns) ? data.topConcerns : DEFAULT_SUMMARY.topConcerns,
+          recommendations: Array.isArray(data.recommendations) ? data.recommendations : DEFAULT_SUMMARY.recommendations,
+          trend: data.trend === "up" || data.trend === "down" ? data.trend : "flat",
+        });
+      } catch (error) {
+        console.error("Failed to load analytics summary", error);
+        setAiSummary(DEFAULT_SUMMARY);
+        setSummaryError("Unable to load AI summary. Showing default insights.");
+      } finally {
+        setIsSummaryLoading(false);
+      }
+    };
+
+    fetchSummary();
+    return () => controller.abort();
+  }, [dateRange, summaryStatsKey, complaints.length]);
 
   const statusData = [
     { name: "Resolved", value: complaints.filter((c) => c.status === "Resolved").length },
@@ -189,6 +286,70 @@ export function AdminAnalyticsPage() {
             </motion.div>
           ))}
         </div>
+
+        {/* AI Analytics Summary */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-xl border border-slate-200 shadow-sm p-5"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h3 className="text-slate-700">AI Insights</h3>
+              <p className="text-xs text-slate-400 mt-0.5">AI-generated summary based on current complaint analytics.</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              {isSummaryLoading ? (
+                <span>Refreshing summary…</span>
+              ) : (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 uppercase tracking-[0.2em]">
+                  {aiSummary.trend}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <p className="text-sm text-slate-700 leading-7">{aiSummary.executiveSummary}</p>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <h4 className="text-slate-900 text-sm font-semibold mb-2">Key Findings</h4>
+              <ul className="space-y-2 text-sm text-slate-600">
+                {aiSummary.keyFindings.map((item, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="mt-1 text-slate-400">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <h4 className="text-slate-900 text-sm font-semibold mb-2">Top Concerns</h4>
+              <ul className="space-y-2 text-sm text-slate-600">
+                {aiSummary.topConcerns.map((item, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="mt-1 text-slate-400">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <h4 className="text-slate-900 text-sm font-semibold mb-2">Recommendations</h4>
+              <ul className="space-y-2 text-sm text-slate-600">
+                {aiSummary.recommendations.map((item, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="mt-1 text-slate-400">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {summaryError ? <p className="mt-4 text-xs text-rose-600">{summaryError}</p> : null}
+        </motion.div>
 
         {/* Complaints Over Time - Area Chart */}
         <motion.div

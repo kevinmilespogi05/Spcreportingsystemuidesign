@@ -4,7 +4,6 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "prebuild": "chmod +x node_modules/.bin/vite || true",
     "build": "vite build",
     "dev": "vite"
   },
@@ -71,6 +70,7 @@
     "@netlify/functions": "^5.2.0",
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "netlify": "^26.0.1",
     "tailwindcss": "4.1.12"
   },
   "peerDependencies": {

@@ -13,6 +13,7 @@ import {
   Tag,
   Ban,
   UserPlus,
+  CheckCircle,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { ToastNotification } from "../shared/ToastNotification";
@@ -23,6 +24,7 @@ const navItems = [
   { icon: FileText, label: "Complaints", href: "/admin/complaints" },
   { icon: Users, label: "Residents", href: "/admin/residents" },
   { icon: Ban, label: "Banned Residents", href: "/admin/banned" },
+  { icon: CheckCircle, label: "User Verifications", href: "/admin/verification" },
   { icon: Tag, label: "Categories", href: "/admin/categories" },
   { icon: BarChart3, label: "Reports & Analytics", href: "/admin/analytics" },
   { icon: UserPlus, label: "Create User", href: "/admin/create-user" },

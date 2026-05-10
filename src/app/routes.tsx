@@ -18,6 +18,8 @@ import { AdminCategoriesPage } from "./components/admin/AdminCategoriesPage";
 import { AdminAnalyticsPage } from "./components/admin/AdminAnalyticsPage";
 import { AdminSettingsPage } from "./components/admin/AdminSettingsPage";
 import { AdminCreateUserPage } from "./components/admin/AdminCreateUserPage";
+import { AdminVerificationPage } from "./components/admin/AdminVerificationPage";
+import { ProtectedRoute } from "./context/ProtectedRoute";
 
 function NotFound() {
   return <Navigate to="/" replace />;
@@ -42,7 +44,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/resident",
-    Component: ResidentLayout,
+    element: (
+      <ProtectedRoute requiredRole="resident">
+        <ResidentLayout />
+      </ProtectedRoute>
+    ),
     children: [
       {
         index: true,
@@ -68,7 +74,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/admin",
-    Component: AdminLayout,
+    element: (
+      <ProtectedRoute requiredRole="admin">
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
       {
         index: true,
@@ -101,6 +111,10 @@ export const router = createBrowserRouter([
       {
         path: "create-user",
         Component: AdminCreateUserPage,
+      },
+      {
+        path: "verification",
+        Component: AdminVerificationPage,
       },
     ],
   },

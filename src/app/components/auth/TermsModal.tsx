@@ -4,9 +4,10 @@ import { useState } from "react";
 interface TermsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onAccept?: () => void;
 }
 
-export function TermsModal({ isOpen, onClose }: TermsModalProps) {
+export function TermsModal({ isOpen, onClose, onAccept }: TermsModalProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!isOpen) return null;
@@ -160,7 +161,10 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
         {/* Footer */}
         <div className="p-6 border-t border-slate-200 flex-shrink-0 bg-slate-50 rounded-b-2xl">
           <button
-            onClick={onClose}
+            onClick={() => {
+              onAccept?.();
+              onClose();
+            }}
             className="w-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
             I Understand

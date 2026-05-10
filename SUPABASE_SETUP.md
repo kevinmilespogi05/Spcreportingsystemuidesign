@@ -38,6 +38,15 @@ CREATE TABLE residents (
   avatar_url TEXT,
   role VARCHAR(20) DEFAULT 'resident',
   status VARCHAR(20) DEFAULT 'active',
+  -- New fields for user verification and approval workflow
+  account_status VARCHAR(20) DEFAULT 'pending_approval',
+  approval_date TIMESTAMP NULL,
+  approved_by UUID NULL REFERENCES residents(id),
+  rejection_reason TEXT NULL,
+  -- Government ID verification fields
+  id_type VARCHAR(50) NULL,
+  id_front_url TEXT NULL,
+  id_back_url TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -66,6 +75,11 @@ CREATE POLICY "Authenticated users can update resident status"
   ON residents FOR UPDATE
   USING (auth.uid() IS NOT NULL);
 
+-- Allow authenticated users to update resident approval fields (app-level auth enforces admin role check)
+CREATE POLICY "Authenticated users can update resident approval fields"
+  ON residents FOR UPDATE
+  USING (auth.uid() IS NOT NULL);
+
 -- Create complaints table
 CREATE TABLE complaints (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,6 +91,18 @@ CREATE TABLE complaints (
   image_url TEXT,
   status VARCHAR(20) NOT NULL DEFAULT 'Pending',
   remarks TEXT,
+  -- AI-powered analysis fields
+  ai_image_status VARCHAR(20) DEFAULT 'pending',
+  ai_image_confidence NUMERIC(3,2) DEFAULT 0,
+  ai_image_explanation TEXT NULL,
+  ai_category_suggestion VARCHAR(100) NULL,
+  ai_severity_level VARCHAR(20) NULL,
+  ai_urgency_level VARCHAR(20) NULL,
+  ai_duplicate_flag BOOLEAN DEFAULT false,
+  ai_duplicate_matches JSONB NULL,
+  ai_recommended_department VARCHAR(100) NULL,
+  ai_priority_level VARCHAR(20) NULL,
+  ai_response_timeline TEXT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT now(),
   updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
@@ -128,6 +154,52 @@ CREATE POLICY "Authenticated users can delete complaints"
   ON complaints FOR DELETE
   USING (auth.uid() IS NOT NULL);
 ```
+
+---
+
+## Database Migration: Add User Verification & AI Fields
+
+If you already have the basic schema set up, run this migration to add the new fields for user verification and AI-powered features:
+
+```sql
+-- Add user verification and approval fields to residents table
+ALTER TABLE residents ADD COLUMN account_status VARCHAR(20) DEFAULT 'pending_approval';
+ALTER TABLE residents ADD COLUMN approval_date TIMESTAMP NULL;
+ALTER TABLE residents ADD COLUMN approved_by UUID NULL REFERENCES residents(id);
+ALTER TABLE residents ADD COLUMN rejection_reason TEXT NULL;
+ALTER TABLE residents ADD COLUMN id_type VARCHAR(50) NULL;
+ALTER TABLE residents ADD COLUMN id_front_url TEXT NULL;
+ALTER TABLE residents ADD COLUMN id_back_url TEXT NULL;
+
+-- Add AI-powered analysis fields to complaints table
+ALTER TABLE complaints ADD COLUMN ai_image_status VARCHAR(20) DEFAULT 'pending';
+ALTER TABLE complaints ADD COLUMN ai_image_confidence NUMERIC(3,2) DEFAULT 0;
+ALTER TABLE complaints ADD COLUMN ai_image_explanation TEXT NULL;
+ALTER TABLE complaints ADD COLUMN ai_category_suggestion VARCHAR(100) NULL;
+ALTER TABLE complaints ADD COLUMN ai_severity_level VARCHAR(20) NULL;
+ALTER TABLE complaints ADD COLUMN ai_urgency_level VARCHAR(20) NULL;
+ALTER TABLE complaints ADD COLUMN ai_duplicate_flag BOOLEAN DEFAULT false;
+ALTER TABLE complaints ADD COLUMN ai_duplicate_matches JSONB NULL;
+ALTER TABLE complaints ADD COLUMN ai_recommended_department VARCHAR(100) NULL;
+ALTER TABLE complaints ADD COLUMN ai_priority_level VARCHAR(20) NULL;
+ALTER TABLE complaints ADD COLUMN ai_response_timeline TEXT NULL;
+
+-- Update existing residents to have approved status (for backward compatibility)
+UPDATE residents SET account_status = 'approved' WHERE status = 'active';
+
+-- Add RLS policy for approval field updates
+CREATE POLICY "Authenticated users can update resident approval fields"
+  ON residents FOR UPDATE
+  USING (auth.uid() IS NOT NULL);
+```
+
+**Migration Notes:**
+- Existing active residents will be set to `account_status = 'approved'` for backward compatibility
+- New registrations will default to `account_status = 'pending_approval'`
+- All AI fields default to appropriate values for existing complaints
+- Run this migration in your Supabase SQL Editor
+
+---
 
 ### 4. Enable Email Authentication in Supabase
 

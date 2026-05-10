@@ -15,6 +15,26 @@
   to = "/.netlify/functions/complaints-stats"
   status = 200
 
+[[redirects]]
+  from = "/api/verify-image"
+  to = "/.netlify/functions/verify-image"
+  status = 200
+
+[[redirects]]
+  from = "/api/categorize-complaint"
+  to = "/.netlify/functions/categorize-complaint"
+  status = 200
+
+[[redirects]]
+  from = "/api/detect-duplicates"
+  to = "/.netlify/functions/detect-duplicates"
+  status = 200
+
+[[redirects]]
+  from = "/api/analytics-summary"
+  to = "/.netlify/functions/generate-analytics-summary"
+  status = 200
+
 # ── SPA catch-all (must be LAST) ──────────────────────────────────────────────
 [[redirects]]
   from = "/*"
@@ -27,6 +47,8 @@
   VITE_CLOUDINARY_CLOUD_NAME = "dzqtdl5aa"
   VITE_CLOUDINARY_UPLOAD_PRESET = "cars-g-uploads"
   VITE_API_URL = "https://spc-reporting-backend.onrender.com"
+  VITE_GEMINI_API_KEY = ""
+  NETLIFY_GEMINI_API_KEY = ""
 
 # Cache settings
 [[headers]]

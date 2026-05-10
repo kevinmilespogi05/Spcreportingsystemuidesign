@@ -1,9 +1,13 @@
 import { supabase } from "./supabase";
+import { uploadToCloudinary } from "./cloudinaryService";
 
 interface RegistrationData {
   fullName: string;
   email: string;
   password: string;
+  idType: string;
+  idFrontFile: File | null;
+  idBackFile: File | null;
 }
 
 interface RegistrationResponse {
@@ -141,6 +145,34 @@ export const registerUser = async (
     }
     // ───────────────────────────────────────────────────────────────────────
 
+    // Upload ID images to Cloudinary
+    let idFrontUrl = null;
+    let idBackUrl = null;
+
+    if (data.idFrontFile) {
+      const frontUpload = await uploadToCloudinary(data.idFrontFile, "ID Front");
+      if (!frontUpload.success) {
+        return {
+          success: false,
+          message: "Registration failed",
+          error: "Failed to upload ID front image. Please try again.",
+        };
+      }
+      idFrontUrl = frontUpload.secure_url;
+    }
+
+    if (data.idBackFile) {
+      const backUpload = await uploadToCloudinary(data.idBackFile, "ID Back");
+      if (!backUpload.success) {
+        return {
+          success: false,
+          message: "Registration failed",
+          error: "Failed to upload ID back image. Please try again.",
+        };
+      }
+      idBackUrl = backUpload.secure_url;
+    }
+
     // Create auth user
     const { data: authData, error: authError } =
       await supabase.auth.signUp({
@@ -181,6 +213,11 @@ export const registerUser = async (
         email: normalizedEmail,
         role: "resident",
         status: "active",
+        // New fields for user verification
+        account_status: "pending_approval",
+        id_type: data.idType,
+        id_front_url: idFrontUrl,
+        id_back_url: idBackUrl,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -205,7 +242,7 @@ export const registerUser = async (
 
     return {
       success: true,
-      message: "Registration successful! Please sign in with your credentials.",
+      message: "Registration submitted successfully! Your account is pending approval.",
     };
   } catch (error) {
     console.error("Unexpected registration error:", error);
@@ -333,6 +370,7 @@ export const createUserAsAdmin = async (
         email: data.email.toLowerCase(),
         role: data.userType,
         status: "active",
+        account_status: "approved", // Admin-created users are automatically approved
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -369,8 +407,7 @@ export const createUserAsAdmin = async (
 };
 
 export const loginUser = async (
-  data: LoginData,
-  role: "resident" | "admin"
+  data: LoginData
 ): Promise<LoginResponse> => {
   try {
     // Validate input
@@ -425,15 +462,40 @@ export const loginUser = async (
       };
     }
 
-    // Get resident data - try to fetch but don't fail if it doesn't exist
+    // Get resident data
     const { data: resident, error: residentError } = await supabase
       .from("residents")
-      .select("id, full_name, email, role, status")
+      .select("id, full_name, email, role, status, account_status, rejection_reason")
       .eq("id", authData.user.id)
       .single();
 
+    if (residentError || !resident) {
+      return {
+        success: false,
+        message: "Login failed",
+        error: "User account not found. Please contact support.",
+      };
+    }
+
+    // Check account status
+    if (resident.account_status === "pending_approval") {
+      return {
+        success: false,
+        message: "Login failed",
+        error: "Your account is pending approval. You will receive an email once reviewed.",
+      };
+    }
+
+    if (resident.account_status === "rejected") {
+      return {
+        success: false,
+        message: "Login failed",
+        error: `Your registration was rejected${resident.rejection_reason ? `: ${resident.rejection_reason}` : ''}. Contact admin for questions.`,
+      };
+    }
+
     // Check if resident is banned
-    if (resident && resident.status === "banned") {
+    if (resident.status === "banned") {
       return {
         success: false,
         message: "Login failed",
@@ -441,31 +503,14 @@ export const loginUser = async (
       };
     }
 
-    // Verify the user's role matches the selected role
-    if (resident && resident.role !== role) {
-      return {
-        success: false,
-        message: "Login failed",
-        error: `This account is registered as a ${resident.role}, not a ${role}. Please select the correct role and try again.`,
-      };
-    }
-
-    // Use resident data if available, otherwise use auth data
-    const userData = resident || {
-      id: authData.user.id,
-      full_name: authData.user.user_metadata?.full_name || "",
-      email: authData.user.email || "",
-      role: role,
-    };
-
     return {
       success: true,
       message: "Login successful",
       user: {
-        id: userData.id,
-        name: userData.full_name || userData.email?.split("@")[0] || "User",
-        email: userData.email,
-        role: userData.role || role,
+        id: resident.id,
+        name: resident.full_name || resident.email?.split("@")[0] || "User",
+        email: resident.email,
+        role: resident.role,
       },
     };
   } catch (error) {

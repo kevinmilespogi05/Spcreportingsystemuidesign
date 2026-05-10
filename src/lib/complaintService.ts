@@ -1044,3 +1044,344 @@ export const getComplaintCounts = async (): Promise<ComplaintCounts> => {
   }
 };
 
+// ─── User Verification Methods ────────────────────────────────────────────────
+
+export interface PendingUser {
+  id: string;
+  full_name: string;
+  email: string;
+  id_type: string;
+  id_front_url: string | null;
+  id_back_url: string | null;
+  created_at: string;
+}
+
+export interface UserVerificationResponse {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+// Get pending user verifications (admin only)
+export const getPendingVerifications = async (): Promise<PendingUser[]> => {
+  try {
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      throw new Error("You must be logged in");
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      throw new Error("Access denied: Only admins can view pending verifications");
+    }
+
+    // Fetch pending users
+    const { data: pendingUsers, error: fetchError } = await supabase
+      .from("residents")
+      .select("id, full_name, email, id_type, id_front_url, id_back_url, created_at")
+      .eq("account_status", "pending_approval")
+      .order("created_at", { ascending: false });
+
+    if (fetchError) {
+      console.error("Fetch error:", fetchError);
+      throw new Error(fetchError.message || "Failed to fetch pending verifications");
+    }
+
+    return pendingUsers || [];
+  } catch (error) {
+    console.error("Error fetching pending verifications:", error);
+    throw error;
+  }
+};
+
+// Get approved users (admin only)
+export const getApprovedUsers = async (): Promise<PendingUser[]> => {
+  try {
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      throw new Error("You must be logged in");
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      throw new Error("Access denied: Only admins can view approved users");
+    }
+
+    // Fetch approved users
+    const { data: approvedUsers, error: fetchError } = await supabase
+      .from("residents")
+      .select("id, full_name, email, id_type, id_front_url, id_back_url, created_at")
+      .eq("account_status", "approved")
+      .order("approval_date", { ascending: false });
+
+    if (fetchError) {
+      console.error("Fetch error:", fetchError);
+      throw new Error(fetchError.message || "Failed to fetch approved users");
+    }
+
+    return approvedUsers || [];
+  } catch (error) {
+    console.error("Error fetching approved users:", error);
+    throw error;
+  }
+};
+
+// Get rejected users (admin only)
+export const getRejectedUsers = async (): Promise<PendingUser[]> => {
+  try {
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      throw new Error("You must be logged in");
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      throw new Error("Access denied: Only admins can view rejected users");
+    }
+
+    // Fetch rejected users
+    const { data: rejectedUsers, error: fetchError } = await supabase
+      .from("residents")
+      .select("id, full_name, email, id_type, id_front_url, id_back_url, created_at, rejection_reason")
+      .eq("account_status", "rejected")
+      .order("updated_at", { ascending: false });
+
+    if (fetchError) {
+      console.error("Fetch error:", fetchError);
+      throw new Error(fetchError.message || "Failed to fetch rejected users");
+    }
+
+    return rejectedUsers || [];
+  } catch (error) {
+    console.error("Error fetching rejected users:", error);
+    throw error;
+  }
+};
+
+// Approve user registration (admin only)
+export const approveUser = async (userId: string): Promise<UserVerificationResponse> => {
+  try {
+    // Validate input
+    if (!userId) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "User ID is required",
+      };
+    }
+
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      return {
+        success: false,
+        message: "Access denied",
+        error: "You must be logged in",
+      };
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      return {
+        success: false,
+        message: "Access denied",
+        error: "Only admins can approve users",
+      };
+    }
+
+    // Get user details before updating
+    const { data: targetUser, error: fetchError } = await supabase
+      .from("residents")
+      .select("full_name, account_status")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !targetUser) {
+      console.error("Fetch error:", fetchError);
+      return {
+        success: false,
+        message: "Failed to approve user",
+        error: "User not found",
+      };
+    }
+
+    // Check if user is already approved
+    if (targetUser.account_status === "approved") {
+      return {
+        success: false,
+        message: "User already approved",
+        error: `${targetUser.full_name} is already approved`,
+      };
+    }
+
+    // Update user status to approved
+    const { error: updateError } = await supabase
+      .from("residents")
+      .update({
+        account_status: "approved",
+        approval_date: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+      return {
+        success: false,
+        message: "Failed to approve user",
+        error: updateError.message || "An error occurred while approving the user",
+      };
+    }
+
+    return {
+      success: true,
+      message: `${targetUser.full_name} has been approved successfully`,
+    };
+  } catch (error) {
+    console.error("Unexpected error approving user:", error);
+    return {
+      success: false,
+      message: "Failed to approve user",
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+
+// Reject user registration (admin only)
+export const rejectUser = async (
+  userId: string,
+  reason: string
+): Promise<UserVerificationResponse> => {
+  try {
+    // Validate input
+    if (!userId) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "User ID is required",
+      };
+    }
+
+    if (!reason || !reason.trim()) {
+      return {
+        success: false,
+        message: "Validation failed",
+        error: "Rejection reason is required",
+      };
+    }
+
+    // Get current user to verify admin
+    const { data: { user }, error: userError } = await executeWithRetry(() =>
+      supabase.auth.getUser()
+    );
+
+    if (userError || !user) {
+      return {
+        success: false,
+        message: "Access denied",
+        error: "You must be logged in",
+      };
+    }
+
+    // Verify user is admin
+    const { data: adminResident, error: residentError } = await executeWithRetry(async () =>
+      await supabase.from("residents").select("role").eq("id", user.id).single()
+    ) as any;
+
+    if (residentError || !adminResident || adminResident.role !== "admin") {
+      return {
+        success: false,
+        message: "Access denied",
+        error: "Only admins can reject users",
+      };
+    }
+
+    // Get user details before updating
+    const { data: targetUser, error: fetchError } = await supabase
+      .from("residents")
+      .select("full_name, account_status")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !targetUser) {
+      console.error("Fetch error:", fetchError);
+      return {
+        success: false,
+        message: "Failed to reject user",
+        error: "User not found",
+      };
+    }
+
+    // Check if user is already rejected
+    if (targetUser.account_status === "rejected") {
+      return {
+        success: false,
+        message: "User already rejected",
+        error: `${targetUser.full_name} is already rejected`,
+      };
+    }
+
+    // Update user status to rejected
+    const { error: updateError } = await supabase
+      .from("residents")
+      .update({
+        account_status: "rejected",
+        rejection_reason: reason.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Update error:", updateError);
+      return {
+        success: false,
+        message: "Failed to reject user",
+        error: updateError.message || "An error occurred while rejecting the user",
+      };
+    }
+
+    return {
+      success: true,
+      message: `${targetUser.full_name} has been rejected successfully`,
+    };
+  } catch (error) {
+    console.error("Unexpected error rejecting user:", error);
+    return {
+      success: false,
+      message: "Failed to reject user",
+      error: "An unexpected error occurred. Please try again.",
+    };
+  }
+};
+

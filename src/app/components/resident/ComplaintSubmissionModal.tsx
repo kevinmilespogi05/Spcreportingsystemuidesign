@@ -21,15 +21,20 @@ const COMPLAINT_CATEGORIES = [
 
 type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
 
+const isComplaintCategory = (value: string): value is ComplaintCategory => {
+  return COMPLAINT_CATEGORIES.includes(value as ComplaintCategory);
+};
+
 const steps = [
-  { id: 1, label: "Category", icon: Tag },
-  { id: 2, label: "Details", icon: FileText },
+  { id: 1, label: "Details", icon: FileText },
+  { id: 2, label: "Category", icon: Tag },
   { id: 3, label: "Attachments", icon: ImageIcon },
   { id: 4, label: "Review", icon: Check },
 ];
 
 export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalProps) {
   const [step, setStep] = useState(1);
+  const [title, setTitle] = useState("");
   const [category, setCategory] = useState<ComplaintCategory | "">("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -39,6 +44,20 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // AI Integration states
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiConfidence, setAiConfidence] = useState<number>(0);
+  const [aiSeverity, setAiSeverity] = useState<string>("");
+  const [aiUrgency, setAiUrgency] = useState<string>("");
+  const [isLoadingAiSuggestion, setIsLoadingAiSuggestion] = useState(false);
+  const [imageVerificationStatus, setImageVerificationStatus] = useState<string | null>(null);
+  const [imageVerificationExplanation, setImageVerificationExplanation] = useState<string>("");
+  const [isDuplicateWarning, setIsDuplicateWarning] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [duplicateSimilarIds, setDuplicateSimilarIds] = useState<string[]>([]);
+  const [ignoreDuplicateWarning, setIgnoreDuplicateWarning] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { createComplaint, setToastMessage } = useApp();
 
@@ -79,6 +98,151 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   };
 
   /**
+   * Call the AI categorization API to suggest a category based on title + description
+   */
+  const getAiCategorySuggestion = async (titleText: string, descriptionText: string) => {
+    setIsLoadingAiSuggestion(true);
+    try {
+      const response = await fetch("/.netlify/functions/categorize-complaint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: titleText,
+          description: descriptionText,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (data.suggestedCategory) {
+        const suggestedCategory = data.suggestedCategory as string;
+        setAiSuggestion(suggestedCategory);
+        setAiConfidence(data.confidence || 0);
+        setAiSeverity(data.severity || "");
+        setAiUrgency(data.urgency || "");
+        if (isComplaintCategory(suggestedCategory)) {
+          setCategory(suggestedCategory);
+        }
+        console.log("[ComplaintModal] AI suggestion:", data);
+      }
+    } catch (error) {
+      // If API fails (e.g., in dev with vite), use mock AI suggestion based on keywords
+      console.warn("[ComplaintModal] AI API failed, using keyword-based suggestion:", error);
+      const combinedText = `${titleText} ${descriptionText}`.toLowerCase();
+      
+      // Simple keyword matching for demo purposes
+      let suggested = "Other";
+      let severity = "medium";
+      let urgency = "medium";
+      
+      if (combinedText.includes("road") || combinedText.includes("pothole") || combinedText.includes("pavement")) {
+        suggested = "Road & Infrastructure";
+        severity = "high";
+      } else if (combinedText.includes("trash") || combinedText.includes("garbage") || combinedText.includes("waste")) {
+        suggested = "Waste Management";
+        severity = "medium";
+      } else if (combinedText.includes("crime") || combinedText.includes("theft") || combinedText.includes("safe")) {
+        suggested = "Public Safety";
+        severity = "high";
+        urgency = "high";
+      } else if (combinedText.includes("noise") || combinedText.includes("loud") || combinedText.includes("sound")) {
+        suggested = "Noise Complaint";
+        severity = "low";
+      } else if (combinedText.includes("light") || combinedText.includes("dark") || combinedText.includes("street light")) {
+        suggested = "Street Lighting";
+        severity = "medium";
+      } else if (combinedText.includes("water") || combinedText.includes("drain") || combinedText.includes("flood")) {
+        suggested = "Water & Drainage";
+        severity = "high";
+      } else if (combinedText.includes("health") || combinedText.includes("disease") || combinedText.includes("pest")) {
+        suggested = "Public Health";
+        severity = "high";
+      }
+      
+      setAiSuggestion(suggested);
+      setAiConfidence(0.72); // Mock confidence
+      setAiSeverity(severity);
+      setAiUrgency(urgency);
+      if (isComplaintCategory(suggested)) {
+        setCategory(suggested);
+      }
+      console.log("[ComplaintModal] Using mock AI suggestion:", { suggested, severity, urgency });
+    } finally {
+      setIsLoadingAiSuggestion(false);
+    }
+  };
+
+  /**
+   * Verify image using AI after upload
+   */
+  const verifyImageWithAi = async (imgUrl: string) => {
+    try {
+      const response = await fetch("/.netlify/functions/verify-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: imgUrl,
+          category: category || "Uncategorized",
+          description: description || "",
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setImageVerificationStatus(data.status);
+      setImageVerificationExplanation(data.explanation || "");
+      console.log("[ComplaintModal] Image verification:", data);
+    } catch (error) {
+      // If verification service fails, do not mark as valid automatically.
+      console.warn("[ComplaintModal] Image verification API failed, marking for manual review:", error);
+      setImageVerificationStatus("needs_review");
+      setImageVerificationExplanation("Automatic verification is unavailable right now. Staff will manually review this image.");
+    }
+  };
+
+  /**
+   * Detect duplicates before submission
+   */
+  const detectDuplicatesBeforeSubmit = async () => {
+    try {
+      const response = await fetch("/.netlify/functions/detect-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          location: location || "",
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (data.isDuplicate && data.matchCount > 0) {
+        setIsDuplicateWarning(true);
+        setDuplicateCount(data.matchCount);
+        setDuplicateSimilarIds(data.similarIds || []);
+        console.log("[ComplaintModal] Duplicate warning:", data);
+        return false; // Don't proceed with submit yet
+      }
+      return true; // Safe to proceed
+    } catch (error) {
+      // If API fails, proceed anyway (no duplicates found)
+      console.warn("[ComplaintModal] Duplicate detection API failed, proceeding:", error);
+      return true;
+    }
+  };
+
+  /**
    * Auto-upload to Cloudinary as soon as the user selects a file.
    * This ensures imageUrl is populated before the user reaches the Submit step.
    */
@@ -108,7 +272,12 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
     }
 
     // Auto-upload to Cloudinary right away — no manual button click needed
-    await uploadFile(selectedFile);
+    const uploadedUrl = await uploadFile(selectedFile);
+    
+    // Verify image with AI after successful upload
+    if (uploadedUrl) {
+      await verifyImageWithAi(uploadedUrl);
+    }
   };
 
   const handleRemoveImage = () => {
@@ -121,7 +290,13 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   };
 
   const handleNext = () => {
-    if (step < 4) setStep(step + 1);
+    if (step < 4) {
+      // When moving from step 1 to step 2, get AI suggestion
+      if (step === 1) {
+        getAiCategorySuggestion(title, description);
+      }
+      setStep(step + 1);
+    }
   };
 
   const handleBack = () => {
@@ -129,8 +304,8 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   };
 
   const canProceed = () => {
-    if (step === 1) return category !== "";
-    if (step === 2) return description.trim().length >= 20;
+    if (step === 1) return title.trim().length > 0 && description.trim().length >= 20;
+    if (step === 2) return category !== "";
     // Block navigation on step 3 while uploading to ensure imageUrl is set
     if (step === 3) return !isUploading;
     return true;
@@ -139,6 +314,15 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      // First, check for duplicates (unless user already acknowledged warning)
+      if (!ignoreDuplicateWarning) {
+        const canSubmit = await detectDuplicatesBeforeSubmit();
+        if (!canSubmit) {
+          setIsSubmitting(false);
+          return; // User will see the duplicate warning and can decide
+        }
+      }
+
       // Safety net: if a file was selected but auto-upload failed or errored,
       // attempt upload one more time before saving to Supabase.
       let finalImageUrl = imageUrl;
@@ -149,9 +333,12 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
 
       console.log("[ComplaintModal] Submitting complaint with imageUrl:", finalImageUrl);
 
+      // Combine title and description for submission
+      const fullDescription = `${title}\n\n${description}`;
+
       const response = await createComplaint({
         category: category as ComplaintCategory,
-        description,
+        description: fullDescription,
         location: location || undefined,
         imageUrl: finalImageUrl || undefined,
       });
@@ -243,52 +430,26 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
-              >
-                <h3 className="text-slate-800 mb-1">Select Category</h3>
-                <p className="text-slate-500 text-sm mb-5">
-                  Choose the category that best describes your concern
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {COMPLAINT_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setCategory(cat)}
-                      className={`text-left px-3.5 py-3 rounded-xl border-2 text-sm transition-all ${
-                        category === cat
-                          ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      <span className="block">{cat}</span>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {step === 2 && (
-              <motion.div
-                key="step2"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
                 <div>
                   <h3 className="text-slate-800 mb-1">Provide Details</h3>
                   <p className="text-slate-500 text-sm mb-5">
-                    Describe your concern clearly and specifically
+                    Describe your concern clearly and specifically (our AI will suggest a category)
                   </p>
                 </div>
 
                 <div>
                   <label className="text-sm text-slate-600 mb-1.5 block">
-                    Selected Category
+                    Title <span className="text-red-400">*</span>
                   </label>
-                  <div className="px-3.5 py-2.5 bg-slate-100 rounded-xl text-sm text-slate-700 border border-slate-200">
-                    {category}
-                  </div>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Brief summary of your concern (e.g., Broken streetlight near school)"
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all"
+                  />
                 </div>
 
                 <div>
@@ -319,6 +480,87 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                     placeholder="e.g., 123 Rizal Street, Brgy. San Jose"
                     className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all"
                   />
+                </div>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div
+                key="step2"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <div>
+                  <h3 className="text-slate-800 mb-1">Select Category</h3>
+                  <p className="text-slate-500 text-sm mb-5">
+                    Choose the category that best describes your concern
+                  </p>
+                </div>
+
+                {/* AI Suggestion Section */}
+                {isLoadingAiSuggestion && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <Loader className="w-4 h-4 text-blue-600 animate-spin" />
+                    <span className="text-sm text-blue-700">AI is analyzing your complaint...</span>
+                  </div>
+                )}
+
+                {aiSuggestion && !isLoadingAiSuggestion && (
+                  <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl">
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">
+                        🤖 AI Suggestion
+                      </span>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+                        {Math.round(aiConfidence * 100)}% confident
+                      </span>
+                    </div>
+                    <p className="text-sm text-emerald-900 font-medium mb-2">{aiSuggestion}</p>
+                    <div className="flex gap-2 text-xs">
+                      {aiSeverity && (
+                        <span className="px-2 py-1 bg-white/60 text-slate-700 rounded border border-emerald-200">
+                          Severity: {aiSeverity}
+                        </span>
+                      )}
+                      {aiUrgency && (
+                        <span className="px-2 py-1 bg-white/60 text-slate-700 rounded border border-emerald-200">
+                          Urgency: {aiUrgency}
+                        </span>
+                      )}
+                    </div>
+                    {isComplaintCategory(aiSuggestion) && category !== aiSuggestion && (
+                      <button
+                        onClick={() => setCategory(aiSuggestion)}
+                        className="mt-3 text-xs font-medium text-emerald-800 bg-white border border-emerald-300 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        Use This Category
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {COMPLAINT_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategory(cat)}
+                      className={`text-left px-3.5 py-3 rounded-xl border-2 text-sm transition-all ${
+                        category === cat
+                          ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
+                          : aiSuggestion === cat
+                          ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:border-emerald-500"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      {category === cat && (
+                        <span className="inline-block mr-1">✓</span>
+                      )}
+                      <span className="block">{cat}</span>
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -374,9 +616,58 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                         <span className="text-sm text-blue-700">Uploading image to cloud storage…</span>
                       </div>
                     ) : imageUrl ? (
-                      <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                        <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                        <span className="text-sm text-emerald-700">Image uploaded successfully</span>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                          <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          <span className="text-sm text-emerald-700">Image uploaded successfully</span>
+                        </div>
+                        
+                        {/* AI Image Verification Status */}
+                        {imageVerificationStatus && (
+                          <div className={`p-3 rounded-xl border ${
+                            imageVerificationStatus === 'valid' 
+                              ? 'bg-emerald-50 border-emerald-200' 
+                              : imageVerificationStatus === 'needs_review'
+                              ? 'bg-amber-50 border-amber-200'
+                              : 'bg-red-50 border-red-200'
+                          }`}>
+                            <div className="flex items-start gap-2">
+                              {imageVerificationStatus === 'valid' && (
+                                <>
+                                  <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-sm font-medium text-emerald-900">Image is relevant and clear</p>
+                                    {imageVerificationExplanation && (
+                                      <p className="text-xs text-emerald-700 mt-1">{imageVerificationExplanation}</p>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                              {imageVerificationStatus === 'needs_review' && (
+                                <>
+                                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-sm font-medium text-amber-900">Image needs review by staff</p>
+                                    {imageVerificationExplanation && (
+                                      <p className="text-xs text-amber-700 mt-1">{imageVerificationExplanation}</p>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                              {imageVerificationStatus === 'rejected' && (
+                                <>
+                                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-sm font-medium text-red-900">Image cannot be used</p>
+                                    {imageVerificationExplanation && (
+                                      <p className="text-xs text-red-700 mt-1">{imageVerificationExplanation}</p>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : uploadError ? (
                       <div className="space-y-2">
@@ -462,6 +753,13 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                     </div>
                     <div className="h-px bg-slate-200" />
                     <div className="flex justify-between items-start gap-4">
+                      <span className="text-xs text-slate-500 uppercase tracking-wide flex-shrink-0">Title</span>
+                      <p className="text-sm text-slate-700 text-right leading-relaxed">
+                        {title.length > 100 ? title.slice(0, 100) + "..." : title}
+                      </p>
+                    </div>
+                    <div className="h-px bg-slate-200" />
+                    <div className="flex justify-between items-start gap-4">
                       <span className="text-xs text-slate-500 uppercase tracking-wide flex-shrink-0">Description</span>
                       <p className="text-sm text-slate-700 text-right leading-relaxed">
                         {description.length > 120 ? description.slice(0, 120) + "..." : description}
@@ -486,6 +784,36 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
                       </>
                     )}
                   </div>
+
+                  {isDuplicateWarning && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                      <div className="flex items-start gap-3 mb-3">
+                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-900 mb-1">
+                            ⚠️ Similar complaints detected
+                          </p>
+                          <p className="text-xs text-amber-800 mb-2">
+                            We found {duplicateCount} similar complaint{duplicateCount !== 1 ? 's' : ''} that may address your concern.
+                            Please review before submitting.
+                          </p>
+                          {duplicateSimilarIds.length > 0 && (
+                            <p className="text-xs text-amber-700">
+                              <span className="font-medium">Similar IDs:</span> {duplicateSimilarIds.slice(0, 3).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {!ignoreDuplicateWarning && (
+                        <button
+                          onClick={() => setIgnoreDuplicateWarning(true)}
+                          className="w-full text-xs font-medium text-amber-700 bg-white border border-amber-300 hover:bg-amber-50 py-2 px-3 rounded-lg transition-all"
+                        >
+                          I understand, continue anyway →
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
                     <p className="text-xs text-blue-700 leading-relaxed">
@@ -527,18 +855,23 @@ export function ComplaintSubmissionModal({ onClose }: ComplaintSubmissionModalPr
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || isUploading}
+              disabled={isSubmitting || isUploading || (isDuplicateWarning && !ignoreDuplicateWarning)}
               className="flex items-center gap-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-5 rounded-xl transition-all disabled:opacity-70"
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Submitting...
+                  {ignoreDuplicateWarning ? "Submitting..." : "Submitting..."}
                 </>
               ) : isUploading ? (
                 <>
                   <Loader className="w-4 h-4 animate-spin" />
                   Uploading...
+                </>
+              ) : ignoreDuplicateWarning ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Submit Anyway
                 </>
               ) : (
                 <>

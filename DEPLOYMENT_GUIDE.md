@@ -72,6 +72,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 VITE_CLOUDINARY_CLOUD_NAME=dzqtdl5aa
 VITE_CLOUDINARY_UPLOAD_PRESET=cars-g-uploads
 VITE_API_URL=https://spc-reporting-backend.onrender.com
+VITE_GEMINI_API_KEY=your-gemini-api-key
 ```
 
 #### 3.2 Build Test Locally
@@ -111,6 +112,8 @@ VITE_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 VITE_CLOUDINARY_CLOUD_NAME = dzqtdl5aa
 VITE_CLOUDINARY_UPLOAD_PRESET = cars-g-uploads
 VITE_API_URL = https://spc-reporting-backend.onrender.com
+VITE_GEMINI_API_KEY = your-gemini-api-key
+NETLIFY_GEMINI_API_KEY = your-gemini-api-key
 ```
 3. Click **"Save"**
 

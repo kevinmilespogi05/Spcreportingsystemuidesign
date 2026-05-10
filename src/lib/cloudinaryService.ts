@@ -22,16 +22,18 @@ interface CloudinaryResponse {
 /**
  * Upload image to Cloudinary
  * @param file - File to upload
- * @param cloudName - Cloudinary cloud name (from environment variables)
- * @param uploadPreset - Cloudinary upload preset (from environment variables)
+ * @param context - Optional context string for logging (e.g., "ID Front", "ID Back")
  * @returns Object with success status and secure URL or error
  */
 export const uploadToCloudinary = async (
   file: File,
-  cloudName: string,
-  uploadPreset: string
+  context?: string
 ): Promise<CloudinaryUploadResponse> => {
   try {
+    // Get Cloudinary configuration from environment variables
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
     // Validate file
     if (!file) {
       return {
@@ -79,6 +81,7 @@ export const uploadToCloudinary = async (
     console.log("Uploading to Cloudinary:", {
       cloudName,
       uploadPreset,
+      context,
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
